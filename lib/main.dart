@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'services/app_state.dart';
 import 'screens/quran_reader_screen.dart';
-import 'screens/prayer_qibla_screen.dart';
 import 'screens/islamic_tools_screen.dart';
 
 void main() async {
@@ -42,10 +41,11 @@ class _NoorQuranAppState extends State<NoorQuranApp> {
   @override
   Widget build(BuildContext context) {
     final s = widget.appState;
+    final p = s.palette;
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Noor Quran',
+      title: 'Quran',
       locale: s.isArabicUi ? const Locale('ar') : const Locale('en'),
       supportedLocales: const [Locale('en'), Locale('ar')],
       localizationsDelegates: const [
@@ -53,83 +53,120 @@ class _NoorQuranAppState extends State<NoorQuranApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      themeMode: s.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData(
         useMaterial3: true,
+        brightness: p.isLight ? Brightness.light : Brightness.dark,
+        scaffoldBackgroundColor: p.bg,
+        cardColor: p.card,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0B3B2E),
-          brightness: Brightness.light,
+          seedColor: p.accent,
+          brightness: p.isLight ? Brightness.light : Brightness.dark,
+          surface: p.card,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF6F5F0),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0B3B2E),
-          foregroundColor: Colors.white,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFD4AF37),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF071E18),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0B3B2E),
-          foregroundColor: Color(0xFFD4AF37),
+        appBarTheme: AppBarTheme(
+          backgroundColor: p.bg,
+          foregroundColor: p.textPrimary,
+          elevation: 0,
         ),
       ),
       home: Scaffold(
+        backgroundColor: p.bg,
         appBar: AppBar(
-          title: Row(
+          toolbarHeight: 68,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.wb_twilight, color: Color(0xFFD4AF37)),
-              const SizedBox(width: 10),
-              Text(s.tr('Noor Al-Quran', 'نور القرآن الكريم')),
+              Text(
+                s.tr('Quran', 'القرآن الكريم'),
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                ),
+              ),
+              Text(
+                s.tr('Read · Listen · Reflect', 'اقرأ · استمع · تدبر'),
+                style: TextStyle(
+                  color: p.textSecondary,
+                  fontSize: 12.5,
+                ),
+              ),
             ],
           ),
           actions: [
             IconButton(
-              tooltip: s.tr('Switch Language', 'تغيير اللغة'),
-              icon: const Icon(Icons.language),
-              onPressed: s.toggleLanguage,
+              tooltip: s.tr('Search Surahs', 'البحث'),
+              icon: Icon(Icons.search, color: p.textPrimary),
+              onPressed: () => setState(() => _selectedIndex = 1),
             ),
             IconButton(
-              tooltip: s.tr('Toggle Theme', 'تبديل المظهر'),
-              icon: Icon(s.isDarkMode ? Icons.light_mode : Icons.dark_mode),
-              onPressed: s.toggleDarkMode,
+              tooltip: s.tr('Cycle Theme Color', 'تغيير لون المظهر'),
+              icon: Icon(Icons.palette_outlined, color: p.accent),
+              onPressed: () {
+                final idx =
+                    s.themes.indexWhere((t) => t.id == s.selectedThemeId);
+                final next = s.themes[(idx + 1) % s.themes.length];
+                s.setTheme(next.id);
+              },
+            ),
+            IconButton(
+              tooltip: s.tr('Daily Reminder', 'التذكير اليومي'),
+              icon: Icon(Icons.notifications_none, color: p.textPrimary),
+              onPressed: () {
+                s.triggerInstantReminder(
+                  'Quran — The Eternal Guidance',
+                  'Time for your daily Quran recitation & reflection.',
+                );
+              },
             ),
           ],
         ),
         body: IndexedStack(
           index: _selectedIndex,
           children: [
+            HomeDashboardScreen(
+              appState: s,
+              onNavigateTab: (idx) => setState(() => _selectedIndex = idx),
+            ),
             QuranReaderScreen(appState: s),
-            PrayerQiblaScreen(appState: s),
-            HifzAndKhatmaScreen(appState: s),
+            BookmarksAndNotesScreen(appState: s),
             AzkarAndSettingsScreen(appState: s),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.menu_book),
-              label: s.tr('Quran', 'المصحف'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.explore),
-              label: s.tr('Prayer & Qibla', 'الصلاة والقبلة'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.school),
-              label: s.tr('Hifz & Khatma', 'الحفظ والختمة'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.spa),
-              label: s.tr('Azkar & Settings', 'الأذكار والإعدادات'),
-            ),
-          ],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: p.card,
+            border: Border(top: BorderSide(color: p.border, width: 1)),
+          ),
+          child: NavigationBar(
+            backgroundColor: p.card,
+            indicatorColor: p.accent.withOpacity(0.2),
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (idx) =>
+                setState(() => _selectedIndex = idx),
+            destinations: [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined, color: p.textSecondary),
+                selectedIcon: Icon(Icons.home, color: p.accent),
+                label: s.tr('Home', 'الرئيسية'),
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.menu_book_outlined, color: p.textSecondary),
+                selectedIcon: Icon(Icons.menu_book, color: p.accent),
+                label: s.tr('Quran', 'المصحف'),
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.bookmark_border, color: p.textSecondary),
+                selectedIcon: Icon(Icons.bookmark, color: p.accent),
+                label: s.tr('Bookmarks', 'المحفوظات'),
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.person_outline, color: p.textSecondary),
+                selectedIcon: Icon(Icons.person, color: p.accent),
+                label: s.tr('Settings', 'الإعدادات'),
+              ),
+            ],
+          ),
         ),
       ),
     );
