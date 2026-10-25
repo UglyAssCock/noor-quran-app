@@ -1771,7 +1771,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                 IconButton(
                   tooltip: s.tr('Play Full Surah', 'تشغيل السورة كاملة'),
                   icon: Icon(
-                    Icons.FormatListBulleted,
+                    Icons.format_list_bulleted,
                     color: _isPlayingFullSurahMode ? p.accent : p.textSecondary,
                   ),
                   onPressed: _playFullSurahAudio,
