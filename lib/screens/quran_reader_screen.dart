@@ -29,7 +29,13 @@ class _QuranReaderScreenState extends State<QuranReaderScreen>
     super.dispose();
   }
 
-  void _openReader({int? surahNum, int? juzNum, int? pageNum, int? startAyah}) {
+  void _openReader({
+    int? surahNum,
+    int? juzNum,
+    int? pageNum,
+    int? startAyah,
+    bool autoPlayFullSurah = false,
+  }) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ActiveMushafView(
@@ -38,6 +44,94 @@ class _QuranReaderScreenState extends State<QuranReaderScreen>
           initialJuz: juzNum,
           initialPage: pageNum,
           highlightAyah: startAyah,
+          autoPlayFullSurah: autoPlayFullSurah,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleSurahDownload(SurahMeta surah) async {
+    final s = widget.appState;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          s.tr(
+            'Downloading ${surah.nameEn} (${s.selectedReciter.nameEn})...',
+            'جاري تحميل سورة ${surah.nameAr} (${s.selectedReciter.nameAr})...',
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    final ok = await s.downloadFullSurah(surah.number);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? s.tr(
+                  '${surah.nameEn} saved for offline playback!',
+                  'تم حفظ سورة ${surah.nameAr} للاستماع بدون إنترنت!',
+                )
+              : s.tr(
+                  'Download failed. Please check your internet connection.',
+                  'فشل التحميل. يرجى التحقق من الاتصال بالإنترنت.',
+                ),
+        ),
+      ),
+    );
+  }
+
+  void _showOfflineSurahOptions(SurahMeta surah) {
+    final s = widget.appState;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.offline_pin, color: Colors.green),
+              title: Text('${surah.nameEn} • ${surah.nameAr}'),
+              subtitle: Text(
+                s.tr(
+                  'Saved offline (${s.selectedReciter.nameEn})',
+                  'محفوظة بدون إنترنت (${s.selectedReciter.nameAr})',
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.play_circle_fill, color: Color(0xFF0B3B2E)),
+              title: Text(
+                s.tr('Play Full Surah Offline', 'تشغيل السورة كاملة بدون إنترنت'),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _openReader(surahNum: surah.number, autoPlayFullSurah: true);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              title: Text(
+                s.tr('Delete Offline MP3', 'حذف الملف الصوتي المحفوظ'),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                await s.deleteOfflineSurah(surah.number);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      s.tr('Offline MP3 removed.', 'تم حذف الملف الصوتي.'),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -214,6 +308,10 @@ class _QuranReaderScreenState extends State<QuranReaderScreen>
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final surah = s.surahs[index];
+        final isDownloaded = s.isSurahDownloaded(surah.number);
+        final isDownloading = s.isDownloadingSurah(surah.number);
+        final progress = s.getSurahDownloadProgress(surah.number);
+
         return ListTile(
           leading: CircleAvatar(
             backgroundColor: const Color(0xFF0B3B2E),
@@ -227,7 +325,49 @@ class _QuranReaderScreenState extends State<QuranReaderScreen>
           subtitle: Text(
             '${surah.meaningEn} • ${surah.ayahCount} ${s.tr("Verses", "آيات")} (${surah.revelationType})',
           ),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isDownloading)
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 3,
+                        color: const Color(0xFFD4AF37),
+                      ),
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (isDownloaded)
+                IconButton(
+                  tooltip: s.tr('Offline Ready (Tap for options)', 'متاح بدون إنترنت'),
+                  icon: const Icon(Icons.offline_pin, color: Colors.green),
+                  onPressed: () => _showOfflineSurahOptions(surah),
+                )
+              else
+                IconButton(
+                  tooltip: s.tr('Download Full Surah MP3', 'تحميل السورة كاملة MP3'),
+                  icon: const Icon(
+                    Icons.download_for_offline_outlined,
+                    color: Color(0xFFD4AF37),
+                  ),
+                  onPressed: () => _handleSurahDownload(surah),
+                ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
           onTap: () => _openReader(surahNum: surah.number),
         );
       },
@@ -348,6 +488,7 @@ class ActiveMushafView extends StatefulWidget {
   final int? initialJuz;
   final int? initialPage;
   final int? highlightAyah;
+  final bool autoPlayFullSurah;
 
   const ActiveMushafView({
     super.key,
@@ -356,6 +497,7 @@ class ActiveMushafView extends StatefulWidget {
     this.initialJuz,
     this.initialPage,
     this.highlightAyah,
+    this.autoPlayFullSurah = false,
   });
 
   @override
@@ -368,6 +510,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
   bool _repeatCurrentAyah = false;
   bool _continuousPlay = true;
   bool _isPlaying = false;
+  bool _isPlayingFullSurahMode = false;
   int _activeIndex = 0;
 
   late List<AyahItem> _currentAyahs;
@@ -377,6 +520,11 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
     super.initState();
     _loadAyahSet();
     _setupAudioListener();
+    if (widget.autoPlayFullSurah) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _playFullSurahAudio();
+      });
+    }
   }
 
   void _loadAyahSet() {
@@ -414,6 +562,12 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
       setState(() => _isPlaying = state.playing);
 
       if (state.processingState == ProcessingState.completed) {
+        if (_isPlayingFullSurahMode) {
+          if (_repeatCurrentAyah) {
+            _playFullSurahAudio();
+          }
+          return;
+        }
         if (_repeatCurrentAyah) {
           _playAyahAtIndex(_activeIndex);
         } else if (_continuousPlay && _activeIndex + 1 < _currentAyahs.length) {
@@ -423,9 +577,42 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
     });
   }
 
+  Future<void> _playFullSurahAudio() async {
+    if (_currentAyahs.isEmpty) return;
+    final s = widget.appState;
+    final surahNum = _currentAyahs.first.surahNumber;
+    setState(() => _isPlayingFullSurahMode = true);
+
+    try {
+      if (s.isSurahDownloaded(surahNum)) {
+        final localPath = s.localSurahFilePath(surahNum);
+        await _audioPlayer.setFilePath(localPath);
+      } else {
+        final remoteUrl = s.fullSurahRemoteUrl(surahNum);
+        await _audioPlayer.setUrl(remoteUrl);
+      }
+      await _audioPlayer.play();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            s.tr(
+              'Download this Surah first or connect to the internet.',
+              'يرجى تحميل السورة أولاً أو الاتصال بالإنترنت.',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _playAyahAtIndex(int index) async {
     if (index < 0 || index >= _currentAyahs.length) return;
-    setState(() => _activeIndex = index);
+    setState(() {
+      _activeIndex = index;
+      _isPlayingFullSurahMode = false;
+    });
     final ayah = _currentAyahs[index];
     widget.appState.saveLastRead(
       surah: ayah.surahNumber,
@@ -440,13 +627,18 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
       await _audioPlayer.setUrl(url);
       await _audioPlayer.play();
     } catch (e) {
+      // Fallback to offline Full Surah MP3 if saved
+      if (widget.appState.isSurahDownloaded(ayah.surahNumber)) {
+        await _playFullSurahAudio();
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             widget.appState.tr(
-              'Check internet connection to stream audio recitation.',
-              'يرجى التحقق من الاتصال بالإنترنت لتشغيل التلاوة الصوتية.',
+              'Check internet connection or tap Download to save Surah offline.',
+              'تحقق من الإنترنت أو قم بتحميل السورة للاستماع بدون إنترنت.',
             ),
           ),
         ),
@@ -496,6 +688,11 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
   @override
   Widget build(BuildContext context) {
     final s = widget.appState;
+    final currentSurahNum =
+        _currentAyahs.isNotEmpty ? _currentAyahs.first.surahNumber : 1;
+    final isOfflineReady = s.isSurahDownloaded(currentSurahNum);
+    final isDownloading = s.isDownloadingSurah(currentSurahNum);
+
     final titleText = _currentAyahs.isNotEmpty
         ? '${_currentAyahs.first.surahNameEn} • ${_currentAyahs.first.surahNameAr}'
         : s.tr('Quran Reader', 'المصحف الشريف');
@@ -504,6 +701,36 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
       appBar: AppBar(
         title: Text(titleText, style: const TextStyle(fontSize: 16)),
         actions: [
+          if (isDownloading)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Color(0xFFD4AF37),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: isOfflineReady
+                  ? s.tr('Saved Offline (Tap to Play Full Surah)', 'محفوظة بدون إنترنت')
+                  : s.tr('Download Full Surah MP3', 'تحميل السورة كاملة MP3'),
+              icon: Icon(
+                isOfflineReady ? Icons.offline_pin : Icons.download_for_offline_outlined,
+                color: isOfflineReady ? Colors.greenAccent : const Color(0xFFD4AF37),
+              ),
+              onPressed: () async {
+                if (isOfflineReady) {
+                  await _playFullSurahAudio();
+                } else {
+                  await s.downloadFullSurah(currentSurahNum);
+                  if (mounted) setState(() {});
+                }
+              },
+            ),
           IconButton(
             tooltip: s.tr('Switch Page / List Mode', 'تبديل وضع الصفحة / القائمة'),
             icon: Icon(_isMushafPageMode ? Icons.view_list : Icons.auto_stories),
@@ -528,7 +755,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                 ? _buildMushafPageView(s)
                 : _buildVerseByVerseListView(s),
           ),
-          _buildAudioControlBar(s),
+          _buildAudioControlBar(s, isOfflineReady),
         ],
       ),
     );
@@ -689,7 +916,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
     );
   }
 
-  Widget _buildAudioControlBar(AppState s) {
+  Widget _buildAudioControlBar(AppState s, bool isOfflineReady) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -725,11 +952,34 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                       onChanged: (r) {
                         if (r != null) {
                           setState(() => s.setReciter(r));
-                          if (_isPlaying) _playAyahAtIndex(_activeIndex);
+                          if (_isPlaying) {
+                            if (_isPlayingFullSurahMode) {
+                              _playFullSurahAudio();
+                            } else {
+                              _playAyahAtIndex(_activeIndex);
+                            }
+                          }
                         }
                       },
                     ),
                   ),
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        isOfflineReady ? Colors.greenAccent : const Color(0xFFD4AF37),
+                  ),
+                  icon: Icon(
+                    isOfflineReady ? Icons.offline_pin : Icons.album,
+                    size: 18,
+                  ),
+                  label: Text(
+                    isOfflineReady
+                        ? s.tr('Play Offline', 'تشغيل بدون نت')
+                        : s.tr('Full Surah', 'السورة كاملة'),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onPressed: _playFullSurahAudio,
                 ),
               ],
             ),
@@ -737,7 +987,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 IconButton(
-                  tooltip: s.tr('Repeat Verse', 'تكرار الآية'),
+                  tooltip: s.tr('Repeat', 'تكرار'),
                   icon: Icon(
                     Icons.repeat_one,
                     color: _repeatCurrentAyah ? const Color(0xFFD4AF37) : Colors.white70,
@@ -761,6 +1011,8 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                     onPressed: () {
                       if (_isPlaying) {
                         _audioPlayer.pause();
+                      } else if (_isPlayingFullSurahMode) {
+                        _audioPlayer.play();
                       } else {
                         _playAyahAtIndex(_activeIndex);
                       }
