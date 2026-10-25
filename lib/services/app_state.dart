@@ -69,6 +69,16 @@ class ReciterOption {
     required this.subfolder,
     required this.fullSurahBaseUrl,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ReciterOption &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class AppState extends ChangeNotifier {
@@ -115,11 +125,39 @@ class AppState extends ChangeNotifier {
       fullSurahBaseUrl: 'https://server8.mp3quran.net/afs',
     ),
     ReciterOption(
+      id: 'maher',
+      nameEn: 'Maher Al-Muaiqly',
+      nameAr: 'ماهر المعيقلي',
+      subfolder: 'MaherAlMuaiqly128kbps',
+      fullSurahBaseUrl: 'https://server12.mp3quran.net/maher',
+    ),
+    ReciterOption(
+      id: 'dussary',
+      nameEn: 'Yasser Ad-Dussary',
+      nameAr: 'ياسر الدوسري',
+      subfolder: 'Yasser_Ad-Dussary_128kbps',
+      fullSurahBaseUrl: 'https://server11.mp3quran.net/yasser',
+    ),
+    ReciterOption(
+      id: 'ghamdi',
+      nameEn: 'Saad Al-Ghamdi',
+      nameAr: 'سعد الغامدي',
+      subfolder: 'Ghamadi_40kbps',
+      fullSurahBaseUrl: 'https://server7.mp3quran.net/s_gmd',
+    ),
+    ReciterOption(
       id: 'abdulbasit',
-      nameEn: 'AbdulBaset AbdulSamad',
-      nameAr: 'عبد الباسط عبد الصمد',
+      nameEn: 'AbdulBaset AbdulSamad (Murattal)',
+      nameAr: 'عبد الباسط عبد الصمد (مرتل)',
       subfolder: 'Abdul_Basit_Murattal_192kbps',
       fullSurahBaseUrl: 'https://server7.mp3quran.net/basit',
+    ),
+    ReciterOption(
+      id: 'abdulbasit_mjwd',
+      nameEn: 'AbdulBaset AbdulSamad (Mujawwad)',
+      nameAr: 'عبد الباسط عبد الصمد (مجود)',
+      subfolder: 'Abdul_Basit_Mujawwad_128kbps',
+      fullSurahBaseUrl: 'https://server13.mp3quran.net/basit_mjwd',
     ),
     ReciterOption(
       id: 'husary',
@@ -129,11 +167,109 @@ class AppState extends ChangeNotifier {
       fullSurahBaseUrl: 'https://server13.mp3quran.net/husr',
     ),
     ReciterOption(
+      id: 'husary_muallim',
+      nameEn: 'Al-Husary (Muallim / Teacher)',
+      nameAr: 'الحصري (المصحف المعلم)',
+      subfolder: 'Husary_Muallim_128kbps',
+      fullSurahBaseUrl: 'https://server13.mp3quran.net/husr',
+    ),
+    ReciterOption(
+      id: 'minshawi',
+      nameEn: 'Muhammad Siddiq Al-Minshawi (Murattal)',
+      nameAr: 'محمد صديق المنشاوي (مرتل)',
+      subfolder: 'Minshawy_Murattal_128kbps',
+      fullSurahBaseUrl: 'https://server10.mp3quran.net/minsh',
+    ),
+    ReciterOption(
+      id: 'minshawi_mjwd',
+      nameEn: 'Muhammad Siddiq Al-Minshawi (Mujawwad)',
+      nameAr: 'محمد صديق المنشاوي (مجود)',
+      subfolder: 'Minshawy_Mujawwad_192kbps',
+      fullSurahBaseUrl: 'https://server11.mp3quran.net/minsh_mjwd',
+    ),
+    ReciterOption(
       id: 'sudais',
       nameEn: 'Abdurrahmaan As-Sudais',
       nameAr: 'عبد الرحمن السديس',
       subfolder: 'Abdurrahmaan_As-Sudais_192kbps',
       fullSurahBaseUrl: 'https://server11.mp3quran.net/sds',
+    ),
+    ReciterOption(
+      id: 'shuraym',
+      nameEn: 'Saud Ash-Shuraym',
+      nameAr: 'سعود الشريم',
+      subfolder: 'Saood_ash-Shuraym_128kbps',
+      fullSurahBaseUrl: 'https://server7.mp3quran.net/shur',
+    ),
+    ReciterOption(
+      id: 'ajmy',
+      nameEn: 'Ahmed ibn Ali Al-Ajmy',
+      nameAr: 'أحمد بن علي العجمي',
+      subfolder: 'ahmed_ibn_ali_al_ajamy_128kbps',
+      fullSurahBaseUrl: 'https://server10.mp3quran.net/ajm',
+    ),
+    ReciterOption(
+      id: 'shatri',
+      nameEn: 'Abu Bakr Ash-Shatri',
+      nameAr: 'أبو بكر الشاطري',
+      subfolder: 'Abu_Bakr_Ash-Shaatree_128kbps',
+      fullSurahBaseUrl: 'https://server11.mp3quran.net/shatri',
+    ),
+    ReciterOption(
+      id: 'qatami',
+      nameEn: 'Nasser Al-Qatami',
+      nameAr: 'ناصر القطامي',
+      subfolder: 'Nasser_Alqatami_128kbps',
+      fullSurahBaseUrl: 'https://server6.mp3quran.net/qtm',
+    ),
+    ReciterOption(
+      id: 'fares',
+      nameEn: 'Fares Abbad',
+      nameAr: 'فارس عباد',
+      subfolder: 'Fares_Abbad_64kbps',
+      fullSurahBaseUrl: 'https://server8.mp3quran.net/frs_a',
+    ),
+    ReciterOption(
+      id: 'hudhaify',
+      nameEn: 'Ali Al-Hudhaify',
+      nameAr: 'علي الحذيفي',
+      subfolder: 'Hudhaify_128kbps',
+      fullSurahBaseUrl: 'https://server9.mp3quran.net/hthfi',
+    ),
+    ReciterOption(
+      id: 'ayyub',
+      nameEn: 'Muhammad Ayyub',
+      nameAr: 'محمد أيوب',
+      subfolder: 'Muhammad_Ayyoub_128kbps',
+      fullSurahBaseUrl: 'https://server8.mp3quran.net/ayyub',
+    ),
+    ReciterOption(
+      id: 'basfar',
+      nameEn: 'Abdullah Basfar',
+      nameAr: 'عبد الله بصفر',
+      subfolder: 'Abdullah_Basfar_192kbps',
+      fullSurahBaseUrl: 'https://server6.mp3quran.net/bsfr',
+    ),
+    ReciterOption(
+      id: 'rifai',
+      nameEn: 'Hani Ar-Rifai',
+      nameAr: 'هاني الرفاعي',
+      subfolder: 'Hani_Rifai_192kbps',
+      fullSurahBaseUrl: 'https://server8.mp3quran.net/hani',
+    ),
+    ReciterOption(
+      id: 'tablawi',
+      nameEn: 'Mohamed Al-Tablawi',
+      nameAr: 'محمد محمود الطبلاوي',
+      subfolder: 'Mohammad_al_Tablaway_128kbps',
+      fullSurahBaseUrl: 'https://server12.mp3quran.net/tblawi',
+    ),
+    ReciterOption(
+      id: 'jazaery_warsh',
+      nameEn: 'Yassin Al-Jazaery (Warsh)',
+      nameAr: 'ياسين الجزائري (رواية ورش)',
+      subfolder: 'warsh/yassin_al_jazaery_64kbps',
+      fullSurahBaseUrl: 'https://server11.mp3quran.net/qari',
     ),
   ];
 
@@ -191,13 +327,15 @@ class AppState extends ChangeNotifier {
 
   Future<void> _initOfflineStorageDir() async {
     try {
-      final baseDir = Directory('${Directory.systemTemp.parent.path}/files/offline_audio');
+      final baseDir =
+          Directory('${Directory.systemTemp.parent.path}/files/offline_audio');
       if (!await baseDir.exists()) {
         await baseDir.create(recursive: true);
       }
       _offlineAudioDirPath = baseDir.path;
     } catch (_) {
-      final fallbackDir = Directory('${Directory.systemTemp.path}/offline_audio');
+      final fallbackDir =
+          Directory('${Directory.systemTemp.path}/offline_audio');
       if (!await fallbackDir.exists()) {
         await fallbackDir.create(recursive: true);
       }
@@ -266,7 +404,8 @@ class AppState extends ChangeNotifier {
         sink.add(chunk);
         receivedBytes += chunk.length;
         if (totalBytes > 0) {
-          downloadProgress[key] = (receivedBytes / totalBytes).clamp(0.01, 0.99);
+          downloadProgress[key] =
+              (receivedBytes / totalBytes).clamp(0.01, 0.99);
           notifyListeners();
         }
       }
