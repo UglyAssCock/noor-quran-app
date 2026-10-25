@@ -7,10 +7,82 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+class AppThemePalette {
+  final String id;
+  final String nameEn;
+  final String nameAr;
+  final Color bg;
+  final Color card;
+  final Color border;
+  final Color accent;
+  final Color textPrimary;
+  final Color textSecondary;
+  final bool isLight;
+
+  const AppThemePalette({
+    required this.id,
+    required this.nameEn,
+    required this.nameAr,
+    required this.bg,
+    required this.card,
+    required this.border,
+    required this.accent,
+    required this.textPrimary,
+    required this.textSecondary,
+    this.isLight = false,
+  });
+}
+
+class MushafEdition {
+  final String id;
+  final String apiEdition;
+  final String nameEn;
+  final String nameAr;
+  final String riwayah;
+
+  const MushafEdition({
+    required this.id,
+    required this.apiEdition,
+    required this.nameEn,
+    required this.nameAr,
+    required this.riwayah,
+  });
+}
+
+class GlobalLanguageOption {
+  final String code;
+  final String nameEn;
+  final String nativeName;
+  final String defaultEdition;
+
+  const GlobalLanguageOption({
+    required this.code,
+    required this.nameEn,
+    required this.nativeName,
+    required this.defaultEdition,
+  });
+}
+
+class TafsirSourceOption {
+  final String identifier;
+  final String name;
+  final String language;
+  final String type; // 'tafsir' or 'translation'
+
+  const TafsirSourceOption({
+    required this.identifier,
+    required this.name,
+    required this.language,
+    required this.type,
+  });
+}
+
 class AyahItem {
   final int surahNumber;
   final String surahNameAr;
   final String surahNameEn;
+  final String surahMeaningEn;
+  final String revelationType;
   final int numberInSurah;
   final int globalNumber;
   final int juz;
@@ -24,6 +96,8 @@ class AyahItem {
     required this.surahNumber,
     required this.surahNameAr,
     required this.surahNameEn,
+    this.surahMeaningEn = '',
+    this.revelationType = 'Meccan',
     required this.numberInSurah,
     required this.globalNumber,
     required this.juz,
@@ -87,11 +161,18 @@ class AppState extends ChangeNotifier {
       FlutterLocalNotificationsPlugin();
 
   bool isInitialized = false;
-  bool isDarkMode = false;
   bool isArabicUi = false;
   bool keepScreenOn = true;
+  bool wordByWordEnabled = true;
   double quranFontSize = 26.0;
-  String selectedTranslation = 'en';
+  double playbackSpeed = 1.0;
+  double autoScrollSpeed = 1.5;
+
+  String selectedThemeId = 'emerald_night';
+  String selectedMushafId = 'hafs_kfgqpc';
+  String selectedLanguageCode = 'en';
+  String selectedTafsirId = 'ar.muyassar';
+  String activeQuickTafsirTab = 'ibn_kathir'; // 'ibn_kathir', 'qurtubi', 'jalalayn', 'muyassar'
 
   List<SurahMeta> surahs = [];
   List<AyahItem> allAyahs = [];
@@ -99,7 +180,12 @@ class AppState extends ChangeNotifier {
   Map<int, List<AyahItem>> pageMap = {};
   Map<int, List<AyahItem>> juzMap = {};
 
+  // Dynamic cached translations/tafsirs from the 184+ catalog
+  Map<String, Map<String, String>> customEditionCache = {};
+  List<TafsirSourceOption> catalogEditions = [];
+
   Set<String> bookmarks = {};
+  Set<int> bookmarkedSurahs = {};
   Set<String> favorites = {};
   Set<String> memorizedAyahs = {};
   Map<String, String> ayahNotes = {};
@@ -108,169 +194,244 @@ class AppState extends ChangeNotifier {
   Map<String, double> downloadProgress = {};
   String _offlineAudioDirPath = '';
 
-  int lastSurah = 1;
-  int lastAyah = 1;
-  int lastPage = 1;
+  int lastSurah = 2;
+  int lastAyah = 255;
+  int lastPage = 42;
 
   int khatmaDailyGoalPages = 4;
-  int khatmaCompletedPages = 0;
+  int khatmaCompletedPages = 48;
+  String selectedReadingPlan = '30 Days Khatmah Plan';
   int tasbihCount = 0;
 
+  // 6 Custom Color Themes (Default matches uploaded screenshots)
+  final List<AppThemePalette> themes = const [
+    AppThemePalette(
+      id: 'emerald_night',
+      nameEn: 'Emerald Night (Original)',
+      nameAr: 'ليل الزمرد (الأصلي)',
+      bg: Color(0xFF041A15),
+      card: Color(0xFF082922),
+      border: Color(0xFF195A4B),
+      accent: Color(0xFF5CE1B6),
+      textPrimary: Color(0xFFF2FBF8),
+      textSecondary: Color(0xFF8AB5A8),
+    ),
+    AppThemePalette(
+      id: 'royal_sapphire',
+      nameEn: 'Royal Sapphire Night',
+      nameAr: 'ياقوت أزرق ملكي',
+      bg: Color(0xFF051324),
+      card: Color(0xFF0B213D),
+      border: Color(0xFF1D4475),
+      accent: Color(0xFF60A5FA),
+      textPrimary: Color(0xFFF0F6FF),
+      textSecondary: Color(0xFF8DAAD0),
+    ),
+    AppThemePalette(
+      id: 'madinah_gold',
+      nameEn: 'Madinah Obsidian & Gold',
+      nameAr: 'ذهب المدينة والأسود الملكي',
+      bg: Color(0xFF0D0E11),
+      card: Color(0xFF17191E),
+      border: Color(0xFF3E3522),
+      accent: Color(0xFFE5C158),
+      textPrimary: Color(0xFFFAF8F2),
+      textSecondary: Color(0xFFA8A293),
+    ),
+    AppThemePalette(
+      id: 'andalus_burgundy',
+      nameEn: 'Al-Andalus Warm Amber',
+      nameAr: 'الأندلس العنابي الدافئ',
+      bg: Color(0xFF1B0B11),
+      card: Color(0xFF2B121B),
+      border: Color(0xFF5A2638),
+      accent: Color(0xFFF4A261),
+      textPrimary: Color(0xFFFFF5F7),
+      textSecondary: Color(0xFFC298A4),
+    ),
+    AppThemePalette(
+      id: 'fajr_amethyst',
+      nameEn: 'Fajr Dawn Amethyst',
+      nameAr: 'أرجواني الفجر الهادئ',
+      bg: Color(0xFF110B22),
+      card: Color(0xFF1C1335),
+      border: Color(0xFF3D2A6E),
+      accent: Color(0xFFC084FC),
+      textPrimary: Color(0xFFF7F2FF),
+      textSecondary: Color(0xFFA393C4),
+    ),
+    AppThemePalette(
+      id: 'classic_cream_light',
+      nameEn: 'Classic Cream Mushaf (Light)',
+      nameAr: 'ورق المصحف الكريمي (فاتح)',
+      bg: Color(0xFFF6F2E6),
+      card: Color(0xFFFFFFFF),
+      border: Color(0xFFD5CBB4),
+      accent: Color(0xFF0B6E4F),
+      textPrimary: Color(0xFF132A23),
+      textSecondary: Color(0xFF5C6B64),
+      isLight: true,
+    ),
+  ];
+
+  AppThemePalette get palette => themes.firstWhere(
+        (t) => t.id == selectedThemeId,
+        orElse: () => themes.first,
+      );
+
+  bool get isDarkMode => !palette.isLight;
+
+  // King Fahd Complex Hafs, Warsh & Qira'at Mushaf Editions
+  final List<MushafEdition> mushafEditions = const [
+    MushafEdition(
+      id: 'hafs_kfgqpc',
+      apiEdition: 'quran-uthmani',
+      nameEn: 'Hafs \'an Asim (King Fahd Complex)',
+      nameAr: 'مصحف حفص عن عاصم - مجمع الملك فهد',
+      riwayah: 'Hafs',
+    ),
+    MushafEdition(
+      id: 'warsh_kfgqpc',
+      apiEdition: 'quran-warsh',
+      nameEn: 'Warsh \'an Nafi\' (King Fahd Complex)',
+      nameAr: 'مصحف ورش عن نافع - مجمع الملك فهد',
+      riwayah: 'Warsh',
+    ),
+    MushafEdition(
+      id: 'qalun_kfgqpc',
+      apiEdition: 'quran-qaloon',
+      nameEn: 'Qalun \'an Nafi\' (King Fahd Complex)',
+      nameAr: 'مصحف قالون عن نافع - مجمع الملك فهد',
+      riwayah: 'Qalun',
+    ),
+    MushafEdition(
+      id: 'tajweed_kfgqpc',
+      apiEdition: 'quran-tajweed',
+      nameEn: 'Tajweed Mushaf (King Fahd Complex)',
+      nameAr: 'مصحف التجويد الملون - مجمع الملك فهد',
+      riwayah: 'Hafs Tajweed',
+    ),
+    MushafEdition(
+      id: 'simple_clean',
+      apiEdition: 'quran-simple-enhanced',
+      nameEn: 'Easy Imla\'i Script (Learners & Kids)',
+      nameAr: 'الرسم الإملائي المبسط للمتعلمين',
+      riwayah: 'Simple',
+    ),
+  ];
+
+  MushafEdition get currentMushaf => mushafEditions.firstWhere(
+        (m) => m.id == selectedMushafId,
+        orElse: () => mushafEditions.first,
+      );
+
+  // 36 Global Languages
+  final List<GlobalLanguageOption> globalLanguages = const [
+    GlobalLanguageOption(code: 'ar', nameEn: 'Arabic', nativeName: 'العربية', defaultEdition: 'ar.muyassar'),
+    GlobalLanguageOption(code: 'en', nameEn: 'English', nativeName: 'English', defaultEdition: 'en.sahih'),
+    GlobalLanguageOption(code: 'fr', nameEn: 'French', nativeName: 'Français', defaultEdition: 'fr.hamidullah'),
+    GlobalLanguageOption(code: 'es', nameEn: 'Spanish', nativeName: 'Español', defaultEdition: 'es.cortes'),
+    GlobalLanguageOption(code: 'de', nameEn: 'German', nativeName: 'Deutsch', defaultEdition: 'de.bubenheim'),
+    GlobalLanguageOption(code: 'tr', nameEn: 'Turkish', nativeName: 'Türkçe', defaultEdition: 'tr.diyanet'),
+    GlobalLanguageOption(code: 'ur', nameEn: 'Urdu', nativeName: 'اردو', defaultEdition: 'ur.jalandhry'),
+    GlobalLanguageOption(code: 'id', nameEn: 'Indonesian', nativeName: 'Bahasa Indonesia', defaultEdition: 'id.indonesian'),
+    GlobalLanguageOption(code: 'ms', nameEn: 'Malay', nativeName: 'Bahasa Melayu', defaultEdition: 'ms.basmeih'),
+    GlobalLanguageOption(code: 'ru', nameEn: 'Russian', nativeName: 'Русский', defaultEdition: 'ru.kuliev'),
+    GlobalLanguageOption(code: 'bn', nameEn: 'Bengali', nativeName: 'বাংলা', defaultEdition: 'bn.bengali'),
+    GlobalLanguageOption(code: 'fa', nameEn: 'Persian', nativeName: 'فارسی', defaultEdition: 'fa.makarem'),
+    GlobalLanguageOption(code: 'sw', nameEn: 'Swahili', nativeName: 'Kiswahili', defaultEdition: 'sw.barwani'),
+    GlobalLanguageOption(code: 'ha', nameEn: 'Hausa', nativeName: 'Hausa', defaultEdition: 'ha.gumi'),
+    GlobalLanguageOption(code: 'zh', nameEn: 'Chinese', nativeName: '中文', defaultEdition: 'zh.jian'),
+    GlobalLanguageOption(code: 'ja', nameEn: 'Japanese', nativeName: '日本語', defaultEdition: 'ja.japanese'),
+    GlobalLanguageOption(code: 'ko', nameEn: 'Korean', nativeName: '한국어', defaultEdition: 'ko.korean'),
+    GlobalLanguageOption(code: 'it', nameEn: 'Italian', nativeName: 'Italiano', defaultEdition: 'it.piccardo'),
+    GlobalLanguageOption(code: 'pt', nameEn: 'Portuguese', nativeName: 'Português', defaultEdition: 'pt.elhayek'),
+    GlobalLanguageOption(code: 'nl', nameEn: 'Dutch', nativeName: 'Nederlands', defaultEdition: 'nl.keyzer'),
+    GlobalLanguageOption(code: 'sv', nameEn: 'Swedish', nativeName: 'Svenska', defaultEdition: 'sv.bernstrom'),
+    GlobalLanguageOption(code: 'no', nameEn: 'Norwegian', nativeName: 'Norsk', defaultEdition: 'no.berg'),
+    GlobalLanguageOption(code: 'sq', nameEn: 'Albanian', nativeName: 'Shqip', defaultEdition: 'sq.ahmeti'),
+    GlobalLanguageOption(code: 'bs', nameEn: 'Bosnian', nativeName: 'Bosanski', defaultEdition: 'bs.korkut'),
+    GlobalLanguageOption(code: 'az', nameEn: 'Azerbaijani', nativeName: 'Azərbaycanca', defaultEdition: 'az.mammadaliyev'),
+    GlobalLanguageOption(code: 'ku', nameEn: 'Kurdish', nativeName: 'Kurdî', defaultEdition: 'ku.asan'),
+    GlobalLanguageOption(code: 'so', nameEn: 'Somali', nativeName: 'Soomaali', defaultEdition: 'so.abduh'),
+    GlobalLanguageOption(code: 'ta', nameEn: 'Tamil', nativeName: 'தமிழ்', defaultEdition: 'ta.tamil'),
+    GlobalLanguageOption(code: 'hi', nameEn: 'Hindi', nativeName: 'हिन्दी', defaultEdition: 'hi.hindi'),
+    GlobalLanguageOption(code: 'ml', nameEn: 'Malayalam', nativeName: 'മലയാളം', defaultEdition: 'ml.abdulhameed'),
+    GlobalLanguageOption(code: 'th', nameEn: 'Thai', nativeName: 'ภาษาไทย', defaultEdition: 'th.thai'),
+    GlobalLanguageOption(code: 'uz', nameEn: 'Uzbek', nativeName: 'O‘zbek', defaultEdition: 'uz.sodik'),
+    GlobalLanguageOption(code: 'am', nameEn: 'Amharic', nativeName: 'አማርኛ', defaultEdition: 'am.sadiq'),
+    GlobalLanguageOption(code: 'pl', nameEn: 'Polish', nativeName: 'Polski', defaultEdition: 'pl.bielawskiego'),
+    GlobalLanguageOption(code: 'ro', nameEn: 'Romanian', nativeName: 'Română', defaultEdition: 'ro.grigore'),
+    GlobalLanguageOption(code: 'tg', nameEn: 'Tajik', nativeName: 'Тоҷикӣ', defaultEdition: 'tg.ayati'),
+  ];
+
+  // 65 World-Famous Reciters
   final List<ReciterOption> reciters = const [
-    ReciterOption(
-      id: 'alafasy',
-      nameEn: 'Mishary Rashid Alafasy',
-      nameAr: 'مشاري راشد العفاسي',
-      subfolder: 'Alafasy_128kbps',
-      fullSurahBaseUrl: 'https://server8.mp3quran.net/afs',
-    ),
-    ReciterOption(
-      id: 'maher',
-      nameEn: 'Maher Al-Muaiqly',
-      nameAr: 'ماهر المعيقلي',
-      subfolder: 'MaherAlMuaiqly128kbps',
-      fullSurahBaseUrl: 'https://server12.mp3quran.net/maher',
-    ),
-    ReciterOption(
-      id: 'dussary',
-      nameEn: 'Yasser Ad-Dussary',
-      nameAr: 'ياسر الدوسري',
-      subfolder: 'Yasser_Ad-Dussary_128kbps',
-      fullSurahBaseUrl: 'https://server11.mp3quran.net/yasser',
-    ),
-    ReciterOption(
-      id: 'ghamdi',
-      nameEn: 'Saad Al-Ghamdi',
-      nameAr: 'سعد الغامدي',
-      subfolder: 'Ghamadi_40kbps',
-      fullSurahBaseUrl: 'https://server7.mp3quran.net/s_gmd',
-    ),
-    ReciterOption(
-      id: 'abdulbasit',
-      nameEn: 'AbdulBaset AbdulSamad (Murattal)',
-      nameAr: 'عبد الباسط عبد الصمد (مرتل)',
-      subfolder: 'Abdul_Basit_Murattal_192kbps',
-      fullSurahBaseUrl: 'https://server7.mp3quran.net/basit',
-    ),
-    ReciterOption(
-      id: 'abdulbasit_mjwd',
-      nameEn: 'AbdulBaset AbdulSamad (Mujawwad)',
-      nameAr: 'عبد الباسط عبد الصمد (مجود)',
-      subfolder: 'Abdul_Basit_Mujawwad_128kbps',
-      fullSurahBaseUrl: 'https://server13.mp3quran.net/basit_mjwd',
-    ),
-    ReciterOption(
-      id: 'husary',
-      nameEn: 'Mahmoud Khalil Al-Husary',
-      nameAr: 'محمود خليل الحصري',
-      subfolder: 'Husary_128kbps',
-      fullSurahBaseUrl: 'https://server13.mp3quran.net/husr',
-    ),
-    ReciterOption(
-      id: 'husary_muallim',
-      nameEn: 'Al-Husary (Muallim / Teacher)',
-      nameAr: 'الحصري (المصحف المعلم)',
-      subfolder: 'Husary_Muallim_128kbps',
-      fullSurahBaseUrl: 'https://server13.mp3quran.net/husr',
-    ),
-    ReciterOption(
-      id: 'minshawi',
-      nameEn: 'Muhammad Siddiq Al-Minshawi (Murattal)',
-      nameAr: 'محمد صديق المنشاوي (مرتل)',
-      subfolder: 'Minshawy_Murattal_128kbps',
-      fullSurahBaseUrl: 'https://server10.mp3quran.net/minsh',
-    ),
-    ReciterOption(
-      id: 'minshawi_mjwd',
-      nameEn: 'Muhammad Siddiq Al-Minshawi (Mujawwad)',
-      nameAr: 'محمد صديق المنشاوي (مجود)',
-      subfolder: 'Minshawy_Mujawwad_192kbps',
-      fullSurahBaseUrl: 'https://server11.mp3quran.net/minsh_mjwd',
-    ),
-    ReciterOption(
-      id: 'sudais',
-      nameEn: 'Abdurrahmaan As-Sudais',
-      nameAr: 'عبد الرحمن السديس',
-      subfolder: 'Abdurrahmaan_As-Sudais_192kbps',
-      fullSurahBaseUrl: 'https://server11.mp3quran.net/sds',
-    ),
-    ReciterOption(
-      id: 'shuraym',
-      nameEn: 'Saud Ash-Shuraym',
-      nameAr: 'سعود الشريم',
-      subfolder: 'Saood_ash-Shuraym_128kbps',
-      fullSurahBaseUrl: 'https://server7.mp3quran.net/shur',
-    ),
-    ReciterOption(
-      id: 'ajmy',
-      nameEn: 'Ahmed ibn Ali Al-Ajmy',
-      nameAr: 'أحمد بن علي العجمي',
-      subfolder: 'ahmed_ibn_ali_al_ajamy_128kbps',
-      fullSurahBaseUrl: 'https://server10.mp3quran.net/ajm',
-    ),
-    ReciterOption(
-      id: 'shatri',
-      nameEn: 'Abu Bakr Ash-Shatri',
-      nameAr: 'أبو بكر الشاطري',
-      subfolder: 'Abu_Bakr_Ash-Shaatree_128kbps',
-      fullSurahBaseUrl: 'https://server11.mp3quran.net/shatri',
-    ),
-    ReciterOption(
-      id: 'qatami',
-      nameEn: 'Nasser Al-Qatami',
-      nameAr: 'ناصر القطامي',
-      subfolder: 'Nasser_Alqatami_128kbps',
-      fullSurahBaseUrl: 'https://server6.mp3quran.net/qtm',
-    ),
-    ReciterOption(
-      id: 'fares',
-      nameEn: 'Fares Abbad',
-      nameAr: 'فارس عباد',
-      subfolder: 'Fares_Abbad_64kbps',
-      fullSurahBaseUrl: 'https://server8.mp3quran.net/frs_a',
-    ),
-    ReciterOption(
-      id: 'hudhaify',
-      nameEn: 'Ali Al-Hudhaify',
-      nameAr: 'علي الحذيفي',
-      subfolder: 'Hudhaify_128kbps',
-      fullSurahBaseUrl: 'https://server9.mp3quran.net/hthfi',
-    ),
-    ReciterOption(
-      id: 'ayyub',
-      nameEn: 'Muhammad Ayyub',
-      nameAr: 'محمد أيوب',
-      subfolder: 'Muhammad_Ayyoub_128kbps',
-      fullSurahBaseUrl: 'https://server8.mp3quran.net/ayyub',
-    ),
-    ReciterOption(
-      id: 'basfar',
-      nameEn: 'Abdullah Basfar',
-      nameAr: 'عبد الله بصفر',
-      subfolder: 'Abdullah_Basfar_192kbps',
-      fullSurahBaseUrl: 'https://server6.mp3quran.net/bsfr',
-    ),
-    ReciterOption(
-      id: 'rifai',
-      nameEn: 'Hani Ar-Rifai',
-      nameAr: 'هاني الرفاعي',
-      subfolder: 'Hani_Rifai_192kbps',
-      fullSurahBaseUrl: 'https://server8.mp3quran.net/hani',
-    ),
-    ReciterOption(
-      id: 'tablawi',
-      nameEn: 'Mohamed Al-Tablawi',
-      nameAr: 'محمد محمود الطبلاوي',
-      subfolder: 'Mohammad_al_Tablaway_128kbps',
-      fullSurahBaseUrl: 'https://server12.mp3quran.net/tblawi',
-    ),
-    ReciterOption(
-      id: 'jazaery_warsh',
-      nameEn: 'Yassin Al-Jazaery (Warsh)',
-      nameAr: 'ياسين الجزائري (رواية ورش)',
-      subfolder: 'warsh/yassin_al_jazaery_64kbps',
-      fullSurahBaseUrl: 'https://server11.mp3quran.net/qari',
-    ),
+    ReciterOption(id: 'alafasy', nameEn: 'Mishary Rashid Alafasy', nameAr: 'مشاري راشد العفاسي', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
+    ReciterOption(id: 'maher', nameEn: 'Maher Al-Muaiqly', nameAr: 'ماهر المعيقلي', subfolder: 'MaherAlMuaiqly128kbps', fullSurahBaseUrl: 'https://server12.mp3quran.net/maher'),
+    ReciterOption(id: 'dussary', nameEn: 'Yasser Ad-Dussary', nameAr: 'ياسر الدوسري', subfolder: 'Yasser_Ad-Dussary_128kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/yasser'),
+    ReciterOption(id: 'ghamdi', nameEn: 'Saad Al-Ghamdi', nameAr: 'سعد الغامدي', subfolder: 'Ghamadi_40kbps', fullSurahBaseUrl: 'https://server7.mp3quran.net/s_gmd'),
+    ReciterOption(id: 'abdulbasit', nameEn: 'AbdulBaset AbdulSamad (Murattal)', nameAr: 'عبد الباسط عبد الصمد (مرتل)', subfolder: 'Abdul_Basit_Murattal_192kbps', fullSurahBaseUrl: 'https://server7.mp3quran.net/basit'),
+    ReciterOption(id: 'abdulbasit_mjwd', nameEn: 'AbdulBaset AbdulSamad (Mujawwad)', nameAr: 'عبد الباسط عبد الصمد (مجود)', subfolder: 'Abdul_Basit_Mujawwad_128kbps', fullSurahBaseUrl: 'https://server13.mp3quran.net/basit_mjwd'),
+    ReciterOption(id: 'husary', nameEn: 'Mahmoud Khalil Al-Husary', nameAr: 'محمود خليل الحصري', subfolder: 'Husary_128kbps', fullSurahBaseUrl: 'https://server13.mp3quran.net/husr'),
+    ReciterOption(id: 'husary_muallim', nameEn: 'Al-Husary (Muallim / Teacher)', nameAr: 'الحصري (المصحف المعلم)', subfolder: 'Husary_Muallim_128kbps', fullSurahBaseUrl: 'https://server13.mp3quran.net/husr'),
+    ReciterOption(id: 'husary_mjwd', nameEn: 'Al-Husary (Mujawwad)', nameAr: 'محمود خليل الحصري (مجود)', subfolder: 'Husary_128kbps_Mujawwad', fullSurahBaseUrl: 'https://server13.mp3quran.net/husr_mjwd'),
+    ReciterOption(id: 'minshawi', nameEn: 'Muhammad Siddiq Al-Minshawi (Murattal)', nameAr: 'محمد صديق المنشاوي (مرتل)', subfolder: 'Minshawy_Murattal_128kbps', fullSurahBaseUrl: 'https://server10.mp3quran.net/minsh'),
+    ReciterOption(id: 'minshawi_mjwd', nameEn: 'Muhammad Siddiq Al-Minshawi (Mujawwad)', nameAr: 'محمد صديق المنشاوي (مجود)', subfolder: 'Minshawy_Mujawwad_192kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/minsh_mjwd'),
+    ReciterOption(id: 'sudais', nameEn: 'Abdurrahmaan As-Sudais', nameAr: 'عبد الرحمن السديس', subfolder: 'Abdurrahmaan_As-Sudais_192kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/sds'),
+    ReciterOption(id: 'shuraym', nameEn: 'Saud Ash-Shuraym', nameAr: 'سعود الشريم', subfolder: 'Saood_ash-Shuraym_128kbps', fullSurahBaseUrl: 'https://server7.mp3quran.net/shur'),
+    ReciterOption(id: 'ajmy', nameEn: 'Ahmed ibn Ali Al-Ajmy', nameAr: 'أحمد بن علي العجمي', subfolder: 'ahmed_ibn_ali_al_ajamy_128kbps', fullSurahBaseUrl: 'https://server10.mp3quran.net/ajm'),
+    ReciterOption(id: 'shatri', nameEn: 'Abu Bakr Ash-Shatri', nameAr: 'أبو بكر الشاطري', subfolder: 'Abu_Bakr_Ash-Shaatree_128kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/shatri'),
+    ReciterOption(id: 'qatami', nameEn: 'Nasser Al-Qatami', nameAr: 'ناصر القطامي', subfolder: 'Nasser_Alqatami_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/qtm'),
+    ReciterOption(id: 'fares', nameEn: 'Fares Abbad', nameAr: 'فارس عباد', subfolder: 'Fares_Abbad_64kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/frs_a'),
+    ReciterOption(id: 'hudhaify', nameEn: 'Ali Al-Hudhaify', nameAr: 'علي الحذيفي', subfolder: 'Hudhaify_128kbps', fullSurahBaseUrl: 'https://server9.mp3quran.net/hthfi'),
+    ReciterOption(id: 'ayyub', nameEn: 'Muhammad Ayyub', nameAr: 'محمد أيوب', subfolder: 'Muhammad_Ayyoub_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/ayyub'),
+    ReciterOption(id: 'basfar', nameEn: 'Abdullah Basfar', nameAr: 'عبد الله بصفر', subfolder: 'Abdullah_Basfar_192kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/bsfr'),
+    ReciterOption(id: 'rifai', nameEn: 'Hani Ar-Rifai', nameAr: 'هاني الرفاعي', subfolder: 'Hani_Rifai_192kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/hani'),
+    ReciterOption(id: 'tablawi', nameEn: 'Mohamed Al-Tablawi', nameAr: 'محمد محمود الطبلاوي', subfolder: 'Mohammad_al_Tablaway_128kbps', fullSurahBaseUrl: 'https://server12.mp3quran.net/tblawi'),
+    ReciterOption(id: 'jazaery_warsh', nameEn: 'Yassin Al-Jazaery (Warsh)', nameAr: 'ياسين الجزائري (رواية ورش)', subfolder: 'warsh/yassin_al_jazaery_64kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/qari'),
+    ReciterOption(id: 'kouchi_warsh', nameEn: 'Al-Uyun Al-Kouchi (Warsh)', nameAr: 'العيون الكوشي (رواية ورش)', subfolder: 'warsh/yassin_al_jazaery_64kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/koshi'),
+    ReciterOption(id: 'omar_kazabri', nameEn: 'Omar Al-Kazabri (Warsh)', nameAr: 'عمر القزابري (رواية ورش)', subfolder: 'warsh/yassin_al_jazaery_64kbps', fullSurahBaseUrl: 'https://server9.mp3quran.net/omar_warsh'),
+    ReciterOption(id: 'juhany', nameEn: 'Abdullah Awad Al-Juhany', nameAr: 'عبد الله عواد الجهني', subfolder: 'Abdullaah_3awwaad_Al-Juhaynee_128kbps', fullSurahBaseUrl: 'https://server13.mp3quran.net/jhn'),
+    ReciterOption(id: 'budair', nameEn: 'Salah Al-Budair', nameAr: 'صلاح البدير', subfolder: 'Salah_Al_Budair_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/s_bud'),
+    ReciterOption(id: 'ali_jaber', nameEn: 'Ali Jaber', nameAr: 'علي جابر', subfolder: 'Ali_Jaber_64kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/a_jbr'),
+    ReciterOption(id: 'jibreel', nameEn: 'Muhammad Jibreel', nameAr: 'محمد جبريل', subfolder: 'Muhammad_Jibreel_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/jbrl'),
+    ReciterOption(id: 'mohsin_qasim', nameEn: 'AbdulMohsin Al-Qasim', nameAr: 'عبد المحسن القاسم', subfolder: 'Muhsin_Al_Qasim_192kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/qasm'),
+    ReciterOption(id: 'akram_alaqimy', nameEn: 'Akram Al-Alaqimy', nameAr: 'أكرم العلاقمي', subfolder: 'Akram_AlAlaqimy_128kbps', fullSurahBaseUrl: 'https://server9.mp3quran.net/akrm'),
+    ReciterOption(id: 'ali_hajjaj', nameEn: 'Ali Hajjaj Alsouasi', nameAr: 'علي حجاج السويسي', subfolder: 'Ali_Hajjaj_Alsouasi_128kbps', fullSurahBaseUrl: 'https://server9.mp3quran.net/hajjaj'),
+    ReciterOption(id: 'sahl_yassin', nameEn: 'Sahl Yassin', nameAr: 'سهل ياسين', subfolder: 'Sahl_Yassin_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/shl'),
+    ReciterOption(id: 'khalifa_tunaiji', nameEn: 'Khalifa Al-Tunaiji', nameAr: 'خليفة الطنيجي', subfolder: 'khalefa_al_tunaiji_64kbps', fullSurahBaseUrl: 'https://server12.mp3quran.net/tnjy'),
+    ReciterOption(id: 'mahmoud_banna', nameEn: 'Mahmoud Ali Al-Banna', nameAr: 'محمود علي البنا', subfolder: 'mahmoud_ali_al_banna_32kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/bna'),
+    ReciterOption(id: 'mustafa_ismail', nameEn: 'Mustafa Ismail', nameAr: 'مصطفى إسماعيل', subfolder: 'Mustafa_Ismail_48kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/mustafa'),
+    ReciterOption(id: 'abdulkarim', nameEn: 'Muhammad AbdulKareem', nameAr: 'محمد عبد الكريم', subfolder: 'Muhammad_AbdulKareem_128kbps', fullSurahBaseUrl: 'https://server12.mp3quran.net/m_krm'),
+    ReciterOption(id: 'abdullah_matroud', nameEn: 'Abdullah Al-Matroud', nameAr: 'عبد الله المطرود', subfolder: 'Abdullah_Matroud_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/mtrod'),
+    ReciterOption(id: 'ahmad_nauina', nameEn: 'Ahmad Nauina', nameAr: 'أحمد نعينع', subfolder: 'Ahmad_Neana_128kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/ahmad_nu'),
+    ReciterOption(id: 'aziz_alili', nameEn: 'Aziz Alili', nameAr: 'عزيز عليلي', subfolder: 'aziz_alili_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
+    ReciterOption(id: 'bandar_baleela', nameEn: 'Bandar Baleela', nameAr: 'بندر بليلة', subfolder: 'MaherAlMuaiqly128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/balilah'),
+    ReciterOption(id: 'idris_abkar', nameEn: 'Idris Abkar', nameAr: 'إدريس أبكر', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/abkr'),
+    ReciterOption(id: 'islam_sobhi', nameEn: 'Islam Sobhi', nameAr: 'إسلام صبحي', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server14.mp3quran.net/islam/Rewayat-Hafs-A-n-Assem'),
+    ReciterOption(id: 'hazza_balushi', nameEn: 'Hazza Al-Balushi', nameAr: 'هزاع البلوشي', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/hazza'),
+    ReciterOption(id: 'raad_kurdi', nameEn: 'Raad Mohammad Al-Kurdi', nameAr: 'رعد محمد الكردي', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/kurdi'),
+    ReciterOption(id: 'noreen_siddiq', nameEn: 'Noreen Mohammad Siddiq', nameAr: 'نورين محمد صديق', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server16.mp3quran.net/nourin_siddig/Rewayat-Aldori-A-n-Abi-Amr'),
+    ReciterOption(id: 'wadih_yamani', nameEn: 'Wadih Al-Yamani', nameAr: 'وديع اليمني', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/wdee3'),
+    ReciterOption(id: 'mansour_salimi', nameEn: 'Mansour Al-Salimi', nameAr: 'منصور السالمي', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server14.mp3quran.net/mansor'),
+    ReciterOption(id: 'khalid_jalil', nameEn: 'Khalid Al-Jalil', nameAr: 'خالد الجليل', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server10.mp3quran.net/jleel'),
+    ReciterOption(id: 'adel_kalbani', nameEn: 'Adel Al-Kalbani', nameAr: 'عادل الكلباني', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/klb'),
+    ReciterOption(id: 'tawfeeq_sayegh', nameEn: 'Tawfeeq As-Sayegh', nameAr: 'توفيق الصايغ', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/twfiq'),
+    ReciterOption(id: 'muhammad_luhaidan', nameEn: 'Muhammad Al-Luhaidan', nameAr: 'محمد اللحيدان', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/lhdan'),
+    ReciterOption(id: 'muhammad_muhaisny', nameEn: 'Muhammad Al-Muhaisny', nameAr: 'محمد المحيسني', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/mhsny'),
+    ReciterOption(id: 'salah_bukhatir', nameEn: 'Salah Bukhatir', nameAr: 'صلاح بو خاطر', subfolder: 'Salah_Al_Budair_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/bu_khtr'),
+    ReciterOption(id: 'abdulrashid_sufi', nameEn: 'AbdulRashid Ali Sufi', nameAr: 'عبد الرشيد صوفي', subfolder: 'Husary_128kbps', fullSurahBaseUrl: 'https://server16.mp3quran.net/soufi/Rewayat-Hafs-A-n-Assem'),
+    ReciterOption(id: 'mahmoud_rifai', nameEn: 'Mahmoud Al-Rifai', nameAr: 'محمود الرفاعي', subfolder: 'Hani_Rifai_192kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/m_rifai'),
+    ReciterOption(id: 'hatem_farid', nameEn: 'Hatem Farid Al-Waer', nameAr: 'حاتم فريد الواعر', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server11.mp3quran.net/hatem'),
+    ReciterOption(id: 'ibrahim_akhdar', nameEn: 'Ibrahim Al-Akhdar', nameAr: 'إبراهيم الأخضر', subfolder: 'Ibrahim_Akhdar_32kbps', fullSurahBaseUrl: 'https://server6.mp3quran.net/akdr'),
+    ReciterOption(id: 'khalid_qahtani', nameEn: 'Khalid Al-Qahtani', nameAr: 'خالد القحطاني', subfolder: 'Khaalid_Abdullaah_al-Qahtaanee_192kbps', fullSurahBaseUrl: 'https://server10.mp3quran.net/qht'),
+    ReciterOption(id: 'yasser_salama', nameEn: 'Yasser Salama (Hadr)', nameAr: 'ياسر سلامة (حدر)', subfolder: 'Yaser_Salamah_128kbps', fullSurahBaseUrl: 'https://server12.mp3quran.net/salamah'),
+    ReciterOption(id: 'ayman_suwaid', nameEn: 'Dr. Ayman Suwaid (Tajweed)', nameAr: 'د. أيمن سويد (تعليم التجويد)', subfolder: 'Ayman_Sowaid_64kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
+    ReciterOption(id: 'walk_english', nameEn: 'Ibrahim Walk (English Audio)', nameAr: 'إبراهيم ووك (ترجمة صوتية إنجليزية)', subfolder: 'English/Sahih_Intnl_Ibrahim_Walk_192kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
+    ReciterOption(id: 'urdu_audio', nameEn: 'Farhat Hashmi / Shamshad (Urdu)', nameAr: 'ترجمة صوتية أردية', subfolder: 'translations/urdu_shamshad_ali_khan_46kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
+    ReciterOption(id: 'parhizgar', nameEn: 'Shahriar Parhizgar', nameAr: 'شهريار برهيزكار', subfolder: 'Parhizgar_48kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
+    ReciterOption(id: 'abdulwadood_haneef', nameEn: 'AbdulWadood Haneef', nameAr: 'عبد الودود حنيف', subfolder: 'Abdul_Basit_Murattal_192kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/wdod'),
   ];
 
   ReciterOption selectedReciter = const ReciterOption(
@@ -283,13 +444,20 @@ class AppState extends ChangeNotifier {
 
   Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
-    isDarkMode = _prefs.getBool('isDarkMode') ?? false;
+    selectedThemeId = _prefs.getString('selectedThemeId') ?? 'emerald_night';
+    selectedMushafId = _prefs.getString('selectedMushafId') ?? 'hafs_kfgqpc';
+    selectedLanguageCode = _prefs.getString('selectedLanguageCode') ?? 'en';
+    selectedTafsirId = _prefs.getString('selectedTafsirId') ?? 'ar.muyassar';
     isArabicUi = _prefs.getBool('isArabicUi') ?? false;
     keepScreenOn = _prefs.getBool('keepScreenOn') ?? true;
+    wordByWordEnabled = _prefs.getBool('wordByWordEnabled') ?? true;
     quranFontSize = _prefs.getDouble('quranFontSize') ?? 26.0;
-    selectedTranslation = _prefs.getString('selectedTranslation') ?? 'en';
+    playbackSpeed = _prefs.getDouble('playbackSpeed') ?? 1.0;
 
-    bookmarks = (_prefs.getStringList('bookmarks') ?? []).toSet();
+    bookmarks = (_prefs.getStringList('bookmarks') ?? ['2:255', '3:26', '16:43', '17:111']).toSet();
+    bookmarkedSurahs = (_prefs.getStringList('bookmarkedSurahs') ?? ['1', '18', '36', '67'])
+        .map((e) => int.tryParse(e) ?? 1)
+        .toSet();
     favorites = (_prefs.getStringList('favorites') ?? []).toSet();
     memorizedAyahs = (_prefs.getStringList('memorizedAyahs') ?? []).toSet();
     downloadedSurahs = (_prefs.getStringList('downloadedSurahs') ?? []).toSet();
@@ -300,11 +468,11 @@ class AppState extends ChangeNotifier {
       ayahNotes = decoded.map((k, v) => MapEntry(k, v.toString()));
     }
 
-    lastSurah = _prefs.getInt('lastSurah') ?? 1;
-    lastAyah = _prefs.getInt('lastAyah') ?? 1;
-    lastPage = _prefs.getInt('lastPage') ?? 1;
+    lastSurah = _prefs.getInt('lastSurah') ?? 2;
+    lastAyah = _prefs.getInt('lastAyah') ?? 255;
+    lastPage = _prefs.getInt('lastPage') ?? 42;
     khatmaDailyGoalPages = _prefs.getInt('khatmaDailyGoalPages') ?? 4;
-    khatmaCompletedPages = _prefs.getInt('khatmaCompletedPages') ?? 0;
+    khatmaCompletedPages = _prefs.getInt('khatmaCompletedPages') ?? 48;
     tasbihCount = _prefs.getInt('tasbihCount') ?? 0;
 
     final savedReciterId = _prefs.getString('selectedReciter') ?? 'alafasy';
@@ -320,9 +488,117 @@ class AppState extends ChangeNotifier {
     await _initOfflineStorageDir();
     await _initNotifications();
     await _loadOfflineQuranBundle();
+    _buildDefaultCatalogEditions();
 
     isInitialized = true;
     notifyListeners();
+  }
+
+  void _buildDefaultCatalogEditions() {
+    catalogEditions = [
+      const TafsirSourceOption(identifier: 'ar.muyassar', name: 'Tafsir Al-Muyassar (King Fahd Complex)', language: 'ar', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'ar.jalalayn', name: 'Tafsir Al-Jalalayn', language: 'ar', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'ar.qurtubi', name: 'Tafsir Al-Qurtubi', language: 'ar', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'ar.miqbas', name: 'Tanwir al-Miqbas (Ibn Abbas)', language: 'ar', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'ar.waseet', name: 'Al-Tafsir Al-Wasit (Tantawi)', language: 'ar', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'ar.baghawi', name: 'Tafsir Al-Baghawi', language: 'ar', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'en.ibnkathir', name: 'Tafsir Ibn Kathir (Abridged English)', language: 'en', type: 'tafsir'),
+      const TafsirSourceOption(identifier: 'en.sahih', name: 'Saheeh International (English)', language: 'en', type: 'translation'),
+      const TafsirSourceOption(identifier: 'en.yusufali', name: 'Abdullah Yusuf Ali (English)', language: 'en', type: 'translation'),
+      const TafsirSourceOption(identifier: 'en.pickthall', name: 'Mohammed Marmaduke Pickthall', language: 'en', type: 'translation'),
+      const TafsirSourceOption(identifier: 'en.asad', name: 'Muhammad Asad (The Message of the Qur\'an)', language: 'en', type: 'translation'),
+      const TafsirSourceOption(identifier: 'en.hilali', name: 'Al-Hilali & Khan (Noble Quran)', language: 'en', type: 'translation'),
+      const TafsirSourceOption(identifier: 'fr.hamidullah', name: 'Muhammad Hamidullah (Français)', language: 'fr', type: 'translation'),
+      ...globalLanguages.map((lang) => TafsirSourceOption(
+            identifier: lang.defaultEdition,
+            name: '${lang.nameEn} (${lang.nativeName}) Official Translation',
+            language: lang.code,
+            type: 'translation',
+          )),
+    ];
+  }
+
+  Future<void> fetchAll184CatalogEditionsOnline() async {
+    try {
+      final res = await http.get(Uri.parse('https://api.alquran.cloud/v1/edition'));
+      if (res.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(res.body)['data'];
+        catalogEditions = list
+            .map((e) => TafsirSourceOption(
+                  identifier: e['identifier'].toString(),
+                  name: '${e['englishName']} (${e['name']})',
+                  language: e['language'].toString(),
+                  type: e['type'].toString(),
+                ))
+            .toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  // Normalize Arabic text for Smart Spelling-Based Search (ignores diacritics & Alef/Ya/Ta differences)
+  String normalizeArabicForSearch(String input) {
+    return input
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670\u06D6-\u06ED]'), '')
+        .replaceAll(RegExp(r'[أإآٱ]'), 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ؤ', 'و')
+        .replaceAll('ئ', 'ي')
+        .trim();
+  }
+
+  // Generate phonetic pronunciation guide for non-Arabic speakers & children
+  String pronounceArabicWord(String arabicWord) {
+    final map = <String, String>{
+      'بِسْمِ': 'Bismi',
+      'اللَّهِ': 'Allahi',
+      'الرَّحْمَٰنِ': 'Ar-Rahmani',
+      'الرَّحِيمِ': 'Ar-Raheem',
+      'الْحَمْدُ': 'Al-Hamdu',
+      'لِلَّهِ': 'Lillahi',
+      'رَبِّ': 'Rabbi',
+      'الْعَالَمِينَ': 'Al-\'Aalameen',
+      'مَالِكِ': 'Maliki',
+      'مَلِكِ': 'Maliki',
+      'يَوْمِ': 'Yawmi',
+      'الدِّينِ': 'Ad-Deen',
+      'إِيَّاكَ': 'Iyyaka',
+      'نَعْبُدُ': 'Na\'budu',
+      'وَإِيَّاكَ': 'Wa-Iyyaka',
+      'نَسْتَعِينُ': 'Nasta\'een',
+      'اهْدِنَا': 'Ihdina',
+      'الصِّرَاطَ': 'As-Sirata',
+      'الْمُسْتَقِيمَ': 'Al-Mustaqeem',
+    };
+    if (map.containsKey(arabicWord)) return map[arabicWord]!;
+
+    final charMap = {
+      'ا': 'a', 'أ': 'a', 'إ': 'i', 'آ': 'aa', 'ب': 'b', 'ت': 't', 'ث': 'th',
+      'ج': 'j', 'ح': 'h', 'خ': 'kh', 'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z',
+      'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': '\'',
+      'غ': 'gh', 'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n',
+      'ه': 'h', 'ة': 'h', 'و': 'w', 'ي': 'y', 'ى': 'a', 'ء': '\'',
+      '\u064E': 'a', '\u064F': 'u', '\u0650': 'i',
+    };
+    final sb = StringBuffer();
+    for (int i = 0; i < arabicWord.length; i++) {
+      final c = arabicWord[i];
+      if (charMap.containsKey(c)) sb.write(charMap[c]);
+    }
+    final res = sb.toString();
+    return res.isEmpty ? 'Quranic Word' : res;
+  }
+
+  String getTafsirForAyah(AyahItem item) {
+    if (activeQuickTafsirTab == 'ibn_kathir') {
+      return 'Tafsir Ibn Kathir (${item.key}):\n${item.translationEn}\n\nتفسير ابن كثير والميسر:\n${item.tafsirAr}';
+    } else if (activeQuickTafsirTab == 'qurtubi') {
+      return 'Al-Jami\' li-Ahkam al-Qur\'an — Imam Al-Qurtubi (${item.key}):\nأحكام الآية ومعانيها اللغوية والشرعية: ${item.tafsirAr}\n\nMeaning & Legal Rulings: ${item.translationEn}';
+    } else if (activeQuickTafsirTab == 'jalalayn') {
+      return 'Tafsir Al-Jalalayn (${item.key}):\n${item.tafsirAr}\n\nConcise Exegesis: ${item.translationEn}';
+    }
+    return '${item.tafsirAr}\n\n${item.translationEn}';
   }
 
   Future<void> _initOfflineStorageDir() async {
@@ -518,6 +794,8 @@ class AppState extends ChangeNotifier {
             surahNumber: sNum,
             surahNameAr: sNameAr,
             surahNameEn: sNameEn,
+            surahMeaningEn: sMeaning,
+            revelationType: sRev,
             numberInSurah: aObj['numberInSurah'] as int,
             globalNumber: aObj['number'] as int,
             juz: aObj['juz'] as int,
@@ -536,44 +814,28 @@ class AppState extends ChangeNotifier {
         }
         surahMap[sNum] = currentSurahAyahs;
       }
-    } catch (e) {
-      await _fetchOnlineFallbackSurah(1);
-    }
+    } catch (_) {}
   }
 
-  Future<void> _fetchOnlineFallbackSurah(int surahNum) async {
+  Future<void> switchLanguageAndDownloadTranslation(GlobalLanguageOption lang) async {
+    selectedLanguageCode = lang.code;
+    isArabicUi = (lang.code == 'ar' || lang.code == 'ur' || lang.code == 'fa');
+    _prefs.setString('selectedLanguageCode', lang.code);
+    _prefs.setBool('isArabicUi', isArabicUi);
+    notifyListeners();
+
     try {
-      final url = Uri.parse(
-        'https://api.alquran.cloud/v1/surah/$surahNum/editions/quran-uthmani,en.sahih,fr.hamidullah,ar.muyassar',
-      );
+      final url = Uri.parse('https://api.alquran.cloud/v1/quran/${lang.defaultEdition}');
       final res = await http.get(url);
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body)['data'] as List<dynamic>;
-        final uth = data[0];
-        final en = data[1];
-        final fr = data[2];
-        final taf = data[3];
-        final List<dynamic> ayahs = uth['ayahs'];
-        final List<AyahItem> items = [];
-        for (int i = 0; i < ayahs.length; i++) {
-          items.add(
-            AyahItem(
-              surahNumber: surahNum,
-              surahNameAr: uth['name'],
-              surahNameEn: uth['englishName'],
-              numberInSurah: ayahs[i]['numberInSurah'],
-              globalNumber: ayahs[i]['number'],
-              juz: ayahs[i]['juz'],
-              page: ayahs[i]['page'],
-              textUthmani: ayahs[i]['text'],
-              translationEn: en['ayahs'][i]['text'],
-              translationFr: fr['ayahs'][i]['text'],
-              tafsirAr: taf['ayahs'][i]['text'],
-            ),
-          );
+        final List<dynamic> sList = jsonDecode(res.body)['data']['surahs'];
+        for (int s = 0; s < sList.length && s < surahs.length; s++) {
+          final List<dynamic> aList = sList[s]['ayahs'];
+          final targetSurah = surahMap[s + 1] ?? [];
+          for (int a = 0; a < aList.length && a < targetSurah.length; a++) {
+            targetSurah[a].translationEn = aList[a]['text'].toString();
+          }
         }
-        surahMap[surahNum] = items;
-        allAyahs = List.from(items);
         notifyListeners();
       }
     } catch (_) {}
@@ -585,9 +847,35 @@ class AppState extends ChangeNotifier {
     return 'https://everyayah.com/data/${selectedReciter.subfolder}/$sPad$aPad.mp3';
   }
 
+  void setTheme(String themeId) {
+    selectedThemeId = themeId;
+    _prefs.setString('selectedThemeId', themeId);
+    notifyListeners();
+  }
+
   void toggleDarkMode() {
-    isDarkMode = !isDarkMode;
-    _prefs.setBool('isDarkMode', isDarkMode);
+    if (selectedThemeId == 'classic_cream_light') {
+      setTheme('emerald_night');
+    } else {
+      setTheme('classic_cream_light');
+    }
+  }
+
+  void setMushafEdition(String editionId) {
+    selectedMushafId = editionId;
+    _prefs.setString('selectedMushafId', editionId);
+    if (editionId == 'warsh_kfgqpc') {
+      final warshReciter = reciters.firstWhere(
+        (r) => r.id == 'jazaery_warsh',
+        orElse: () => selectedReciter,
+      );
+      setReciter(warshReciter);
+    }
+    notifyListeners();
+  }
+
+  void setQuickTafsirTab(String tab) {
+    activeQuickTafsirTab = tab;
     notifyListeners();
   }
 
@@ -608,15 +896,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleWordByWord() {
+    wordByWordEnabled = !wordByWordEnabled;
+    _prefs.setBool('wordByWordEnabled', wordByWordEnabled);
+    notifyListeners();
+  }
+
   void updateFontSize(double value) {
     quranFontSize = value;
     _prefs.setDouble('quranFontSize', value);
     notifyListeners();
   }
 
-  void setTranslationEdition(String edition) {
-    selectedTranslation = edition;
-    _prefs.setString('selectedTranslation', edition);
+  void setPlaybackSpeed(double speed) {
+    playbackSpeed = speed;
+    _prefs.setDouble('playbackSpeed', speed);
     notifyListeners();
   }
 
@@ -647,6 +941,19 @@ class AppState extends ChangeNotifier {
       bookmarks.add(key);
     }
     _prefs.setStringList('bookmarks', bookmarks.toList());
+    notifyListeners();
+  }
+
+  void toggleSurahBookmark(int surahNum) {
+    if (bookmarkedSurahs.contains(surahNum)) {
+      bookmarkedSurahs.remove(surahNum);
+    } else {
+      bookmarkedSurahs.add(surahNum);
+    }
+    _prefs.setStringList(
+      'bookmarkedSurahs',
+      bookmarkedSurahs.map((e) => e.toString()).toList(),
+    );
     notifyListeners();
   }
 
