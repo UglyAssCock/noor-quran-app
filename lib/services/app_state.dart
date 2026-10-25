@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -59,12 +60,14 @@ class ReciterOption {
   final String nameEn;
   final String nameAr;
   final String subfolder;
+  final String fullSurahBaseUrl;
 
   const ReciterOption({
     required this.id,
     required this.nameEn,
     required this.nameAr,
     required this.subfolder,
+    required this.fullSurahBaseUrl,
   });
 }
 
@@ -78,7 +81,7 @@ class AppState extends ChangeNotifier {
   bool isArabicUi = false;
   bool keepScreenOn = true;
   double quranFontSize = 26.0;
-  String selectedTranslation = 'en'; // 'en', 'fr', 'ar_tafsir', 'ibn_kathir'
+  String selectedTranslation = 'en';
 
   List<SurahMeta> surahs = [];
   List<AyahItem> allAyahs = [];
@@ -90,6 +93,10 @@ class AppState extends ChangeNotifier {
   Set<String> favorites = {};
   Set<String> memorizedAyahs = {};
   Map<String, String> ayahNotes = {};
+
+  Set<String> downloadedSurahs = {};
+  Map<String, double> downloadProgress = {};
+  String _offlineAudioDirPath = '';
 
   int lastSurah = 1;
   int lastAyah = 1;
@@ -105,24 +112,28 @@ class AppState extends ChangeNotifier {
       nameEn: 'Mishary Rashid Alafasy',
       nameAr: 'مشاري راشد العفاسي',
       subfolder: 'Alafasy_128kbps',
+      fullSurahBaseUrl: 'https://server8.mp3quran.net/afs',
     ),
     ReciterOption(
       id: 'abdulbasit',
       nameEn: 'AbdulBaset AbdulSamad',
       nameAr: 'عبد الباسط عبد الصمد',
       subfolder: 'Abdul_Basit_Murattal_192kbps',
+      fullSurahBaseUrl: 'https://server7.mp3quran.net/basit',
     ),
     ReciterOption(
       id: 'husary',
       nameEn: 'Mahmoud Khalil Al-Husary',
       nameAr: 'محمود خليل الحصري',
       subfolder: 'Husary_128kbps',
+      fullSurahBaseUrl: 'https://server13.mp3quran.net/husr',
     ),
     ReciterOption(
       id: 'sudais',
       nameEn: 'Abdurrahmaan As-Sudais',
       nameAr: 'عبد الرحمن السديس',
       subfolder: 'Abdurrahmaan_As-Sudais_192kbps',
+      fullSurahBaseUrl: 'https://server11.mp3quran.net/sds',
     ),
   ];
 
@@ -131,6 +142,7 @@ class AppState extends ChangeNotifier {
     nameEn: 'Mishary Rashid Alafasy',
     nameAr: 'مشاري راشد العفاسي',
     subfolder: 'Alafasy_128kbps',
+    fullSurahBaseUrl: 'https://server8.mp3quran.net/afs',
   );
 
   Future<void> initialize() async {
@@ -144,6 +156,7 @@ class AppState extends ChangeNotifier {
     bookmarks = (_prefs.getStringList('bookmarks') ?? []).toSet();
     favorites = (_prefs.getStringList('favorites') ?? []).toSet();
     memorizedAyahs = (_prefs.getStringList('memorizedAyahs') ?? []).toSet();
+    downloadedSurahs = (_prefs.getStringList('downloadedSurahs') ?? []).toSet();
 
     final notesRaw = _prefs.getString('ayahNotes');
     if (notesRaw != null && notesRaw.isNotEmpty) {
@@ -168,10 +181,125 @@ class AppState extends ChangeNotifier {
       await WakelockPlus.enable();
     }
 
+    await _initOfflineStorageDir();
     await _initNotifications();
     await _loadOfflineQuranBundle();
 
     isInitialized = true;
+    notifyListeners();
+  }
+
+  Future<void> _initOfflineStorageDir() async {
+    try {
+      final baseDir = Directory('${Directory.systemTemp.parent.path}/files/offline_audio');
+      if (!await baseDir.exists()) {
+        await baseDir.create(recursive: true);
+      }
+      _offlineAudioDirPath = baseDir.path;
+    } catch (_) {
+      final fallbackDir = Directory('${Directory.systemTemp.path}/offline_audio');
+      if (!await fallbackDir.exists()) {
+        await fallbackDir.create(recursive: true);
+      }
+      _offlineAudioDirPath = fallbackDir.path;
+    }
+  }
+
+  String _surahDownloadKey(int surahNumber, [String? reciterId]) {
+    final rId = reciterId ?? selectedReciter.id;
+    return '${rId}_$surahNumber';
+  }
+
+  String fullSurahRemoteUrl(int surahNumber) {
+    final sPad = surahNumber.toString().padLeft(3, '0');
+    return '${selectedReciter.fullSurahBaseUrl}/$sPad.mp3';
+  }
+
+  String localSurahFilePath(int surahNumber) {
+    final sPad = surahNumber.toString().padLeft(3, '0');
+    return '$_offlineAudioDirPath/${selectedReciter.id}_$sPad.mp3';
+  }
+
+  bool isSurahDownloaded(int surahNumber) {
+    final key = _surahDownloadKey(surahNumber);
+    if (!downloadedSurahs.contains(key)) return false;
+    final file = File(localSurahFilePath(surahNumber));
+    return file.existsSync() && file.lengthSync() > 1024;
+  }
+
+  bool isDownloadingSurah(int surahNumber) {
+    return downloadProgress.containsKey(_surahDownloadKey(surahNumber));
+  }
+
+  double getSurahDownloadProgress(int surahNumber) {
+    return downloadProgress[_surahDownloadKey(surahNumber)] ?? 0.0;
+  }
+
+  Future<bool> downloadFullSurah(int surahNumber) async {
+    final key = _surahDownloadKey(surahNumber);
+    if (downloadProgress.containsKey(key)) return false;
+
+    downloadProgress[key] = 0.01;
+    notifyListeners();
+
+    final url = Uri.parse(fullSurahRemoteUrl(surahNumber));
+    final targetPath = localSurahFilePath(surahNumber);
+    final tempFile = File('$targetPath.tmp');
+
+    try {
+      final client = http.Client();
+      final request = http.Request('GET', url);
+      final response = await client.send(request);
+
+      if (response.statusCode != 200) {
+        downloadProgress.remove(key);
+        notifyListeners();
+        client.close();
+        return false;
+      }
+
+      final totalBytes = response.contentLength ?? 0;
+      int receivedBytes = 0;
+      final sink = tempFile.openWrite();
+
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        receivedBytes += chunk.length;
+        if (totalBytes > 0) {
+          downloadProgress[key] = (receivedBytes / totalBytes).clamp(0.01, 0.99);
+          notifyListeners();
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+      client.close();
+
+      await tempFile.rename(targetPath);
+
+      downloadedSurahs.add(key);
+      await _prefs.setStringList('downloadedSurahs', downloadedSurahs.toList());
+      downloadProgress.remove(key);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      downloadProgress.remove(key);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> deleteOfflineSurah(int surahNumber) async {
+    final key = _surahDownloadKey(surahNumber);
+    final file = File(localSurahFilePath(surahNumber));
+    if (await file.exists()) {
+      await file.delete();
+    }
+    downloadedSurahs.remove(key);
+    await _prefs.setStringList('downloadedSurahs', downloadedSurahs.toList());
     notifyListeners();
   }
 
