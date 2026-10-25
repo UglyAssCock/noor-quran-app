@@ -1,5 +1,996 @@
 import 'package:flutter/material.dart';
 import '../services/app_state.dart';
+import 'quran_reader_screen.dart';
+import 'prayer_qibla_screen.dart';
+
+/// Home Dashboard matching Screenshot 2 (Top-2nd screen)
+class HomeDashboardScreen extends StatelessWidget {
+  final AppState appState;
+  final ValueChanged<int> onNavigateTab;
+
+  const HomeDashboardScreen({
+    super.key,
+    required this.appState,
+    required this.onNavigateTab,
+  });
+
+  void _openSurah(BuildContext context, int surahNum, [int? ayahNum]) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ActiveMushafView(
+          appState: appState,
+          initialSurah: surahNum,
+          highlightAyah: ayahNum,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = appState;
+    final p = s.palette;
+    final dayOfYear =
+        DateTime.now().difference(DateTime(DateTime.now().year)).inDays;
+    final dailyAyah = s.allAyahs.isNotEmpty
+        ? s.allAyahs[dayOfYear % s.allAyahs.length]
+        : null;
+
+    return Container(
+      color: p.bg,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Top Bismillah Hero Card with Mosque Arch Illustration
+          GestureDetector(
+            onTap: () => _openSurah(context, 1, 1),
+            child: Container(
+              decoration: BoxDecoration(
+                color: p.card,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: p.border, width: 1.3),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      right: -8,
+                      bottom: -8,
+                      child: MosqueArchIllustration(
+                        width: 135,
+                        height: 130,
+                        accent: p.accent,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+                            style: TextStyle(
+                              color: p.textPrimary,
+                              fontFamily: 'AmiriQuran',
+                              fontSize: 25,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'In the name of Allah, the Entirely Merciful,\nthe Especially Merciful.',
+                            style: TextStyle(
+                              color: p.textSecondary,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Al-Fatiha • 1:1  (${s.currentMushaf.riwayah})',
+                            style: TextStyle(
+                              color: p.accent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 4 Quick Action Buttons (Read Quran | Listen Audio | Bookmarks | Settings)
+          Row(
+            children: [
+              _buildQuickActionCard(
+                p,
+                icon: Icons.menu_book_rounded,
+                label: s.tr('Read\nQuran', 'قراءة\nالمصحف'),
+                onTap: () => onNavigateTab(1),
+              ),
+              const SizedBox(width: 10),
+              _buildQuickActionCard(
+                p,
+                icon: Icons.headphones_rounded,
+                label: s.tr('Listen\nAudio', 'الاستماع\nللتلاوة'),
+                onTap: () => _openSurah(context, s.lastSurah, s.lastAyah),
+              ),
+              const SizedBox(width: 10),
+              _buildQuickActionCard(
+                p,
+                icon: Icons.bookmark_border_rounded,
+                label: s.tr('Saved &\nBookmarks', 'العلامات\nوالمحفوظات'),
+                onTap: () => onNavigateTab(2),
+              ),
+              const SizedBox(width: 10),
+              _buildQuickActionCard(
+                p,
+                icon: Icons.settings_outlined,
+                label: s.tr('Themes &\nSettings', 'المظهر\nوالإعدادات'),
+                onTap: () => onNavigateTab(3),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Continue Reading Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                s.tr('Continue Reading', 'متابعة القراءة'),
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              TextButton(
+                onPressed: () => onNavigateTab(1),
+                child: Text(
+                  s.tr('View All >', 'عرض الكل >'),
+                  style: TextStyle(color: p.accent, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          GestureDetector(
+            onTap: () => _openSurah(context, s.lastSurah, s.lastAyah),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: p.card,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.border),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: p.accent,
+                    child: const Icon(Icons.menu_book, color: Colors.black87),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${s.tr("Surah", "سورة")} ${s.lastSurah} • ${s.tr("Verse", "آية")} ${s.lastAyah}',
+                          style: TextStyle(
+                            color: p.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${s.selectedReadingPlan} • ${s.khatmaCompletedPages}/604 Pages',
+                          style: TextStyle(color: p.textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: (s.khatmaCompletedPages / 604.0).clamp(0.05, 1.0),
+                            minHeight: 6,
+                            backgroundColor: p.bg,
+                            color: p.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.chevron_right, color: p.accent),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Daily Verse Card with Share-as-Image Button
+          Text(
+            s.tr('Daily Verse', 'آية اليوم'),
+            style: TextStyle(
+              color: p.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (dailyAyah != null)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: p.card,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${dailyAyah.surahNameEn} • ${dailyAyah.key}',
+                        style: TextStyle(
+                          color: p.accent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: s.tr('Share as Image', 'مشاركة كصورة'),
+                        icon: Icon(Icons.share_outlined, color: p.accent, size: 20),
+                        onPressed: () =>
+                            showShareVerseAsImageSheet(context, s, dailyAyah),
+                      ),
+                    ],
+                  ),
+                  Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Text(
+                      dailyAyah.textUthmani,
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontFamily: 'AmiriQuran',
+                        fontSize: 22,
+                        height: 1.85,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    dailyAyah.translationEn,
+                    style: TextStyle(
+                      color: p.textSecondary,
+                      fontSize: 13.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionCard(
+    AppThemePalette p, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.border),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: p.accent, size: 26),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bookmarks & Reflections Screen matching Screenshot 2 (Bottom-2nd screen)
+class BookmarksAndNotesScreen extends StatefulWidget {
+  final AppState appState;
+  const BookmarksAndNotesScreen({super.key, required this.appState});
+
+  @override
+  State<BookmarksAndNotesScreen> createState() =>
+      _BookmarksAndNotesScreenState();
+}
+
+class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
+  bool _showVersesTab = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.appState;
+    final p = s.palette;
+
+    return Container(
+      color: p.bg,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Verses | Surahs Pill Switcher
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: p.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showVersesTab = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _showVersesTab ? p.accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        s.tr('Verses & Notes', 'الآيات والملاحظات'),
+                        style: TextStyle(
+                          color: _showVersesTab ? Colors.black87 : p.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showVersesTab = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: !_showVersesTab ? p.accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        s.tr('Surahs', 'السور المحفوظة'),
+                        style: TextStyle(
+                          color: !_showVersesTab ? Colors.black87 : p.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: _showVersesTab
+                ? _buildBookmarkedVersesList(s, p)
+                : _buildBookmarkedSurahsList(s, p),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookmarkedVersesList(AppState s, AppThemePalette p) {
+    final keys = <String>{...s.bookmarks, ...s.ayahNotes.keys}.toList();
+    if (keys.isEmpty) {
+      return Center(
+        child: Text(
+          s.tr('No bookmarked verses yet.', 'لا توجد آيات محفوظة بعد.'),
+          style: TextStyle(color: p.textSecondary),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: keys.length,
+      itemBuilder: (context, idx) {
+        final key = keys[idx];
+        final parts = key.split(':');
+        final sNum = int.tryParse(parts[0]) ?? 1;
+        final aNum = int.tryParse(parts[1]) ?? 1;
+        final surahAyahs = s.surahMap[sNum] ?? [];
+        final ayah = surahAyahs.firstWhere(
+          (a) => a.numberInSurah == aNum,
+          orElse: () => AyahItem(
+            surahNumber: sNum,
+            surahNameAr: 'سورة',
+            surahNameEn: 'Surah $sNum',
+            numberInSurah: aNum,
+            globalNumber: 1,
+            juz: 1,
+            page: 1,
+            textUthmani: 'آية $key',
+          ),
+        );
+        final note = s.ayahNotes[key];
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.border),
+          ),
+          child: InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ActiveMushafView(
+                    appState: s,
+                    initialSurah: sNum,
+                    highlightAyah: aNum,
+                  ),
+                ),
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.bookmark, color: p.accent, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${ayah.surahNameEn} • ${ayah.key}',
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(Icons.chevron_right, color: p.textSecondary),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Text(
+                      ayah.textUthmani,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontFamily: 'AmiriQuran',
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Page ${ayah.page} • Juz ${ayah.juz}',
+                  style: TextStyle(color: p.textSecondary, fontSize: 12),
+                ),
+                if (note != null && note.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '📝 $note',
+                    style: TextStyle(color: p.accent, fontSize: 12.5),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBookmarkedSurahsList(AppState s, AppThemePalette p) {
+    final list = s.bookmarkedSurahs.toList();
+    return ListView.builder(
+      itemCount: list.length,
+      itemBuilder: (context, idx) {
+        final sNum = list[idx];
+        final meta = s.surahs.firstWhere(
+          (m) => m.number == sNum,
+          orElse: () => SurahMeta(
+            number: sNum,
+            nameAr: 'سورة',
+            nameEn: 'Surah $sNum',
+            meaningEn: '',
+            revelationType: 'Meccan',
+            ayahCount: 7,
+          ),
+        );
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.border),
+          ),
+          child: ListTile(
+            leading: RubElHizbBadge(
+              label: '${meta.number}',
+              size: 40,
+              color: p.accent,
+            ),
+            title: Text(
+              '${meta.nameEn} • ${meta.nameAr}',
+              style: TextStyle(
+                color: p.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              '${meta.ayahCount} Verses • ${meta.revelationType}',
+              style: TextStyle(color: p.textSecondary),
+            ),
+            trailing: IconButton(
+              icon: Icon(Icons.delete_outline, color: p.textSecondary),
+              onPressed: () => setState(() => s.toggleSurahBookmark(sNum)),
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ActiveMushafView(
+                    appState: s,
+                    initialSurah: sNum,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Settings, 6 Themes, Hafs/Warsh Mushaf, 34+ Languages, 184+ Tafsir & Tools Screen
+class AzkarAndSettingsScreen extends StatefulWidget {
+  final AppState appState;
+  const AzkarAndSettingsScreen({super.key, required this.appState});
+
+  @override
+  State<AzkarAndSettingsScreen> createState() => _AzkarAndSettingsScreenState();
+}
+
+class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
+  void _show184TafsirAndTranslationsModal(AppState s, AppThemePalette p) {
+    s.fetchAll184CatalogEditionsOnline();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: p.bg,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        builder: (ctx, scrollCtrl) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.tr(
+                    '184+ Tafsir & Translation Sources (${s.catalogEditions.length} Loaded)',
+                    'أكثر من ١٨٤ مصدر للتفسير والترجمة',
+                  ),
+                  style: TextStyle(
+                    color: p.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: s.catalogEditions.length,
+                    itemBuilder: (_, idx) {
+                      final ed = s.catalogEditions[idx];
+                      return Card(
+                        color: p.card,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: p.bg,
+                            child: Text(
+                              ed.language.toUpperCase(),
+                              style: TextStyle(
+                                color: p.accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            ed.name,
+                            style: TextStyle(color: p.textPrimary, fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            '${ed.type.toUpperCase()} • ${ed.identifier}',
+                            style: TextStyle(color: p.textSecondary, fontSize: 12),
+                          ),
+                          trailing: Icon(Icons.cloud_download_outlined, color: p.accent),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Activated ${ed.name} (${ed.identifier})'),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.appState;
+    final p = s.palette;
+
+    return Container(
+      color: p.bg,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // 1. Theme Colors Picker (6 Themes)
+          Text(
+            s.tr('Theme Colors', 'ألوان ومظهر التطبيق'),
+            style: TextStyle(
+              color: p.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: p.border),
+            ),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: s.themes.map((t) {
+                final isSelected = t.id == s.selectedThemeId;
+                return GestureDetector(
+                  onTap: () => setState(() => s.setTheme(t.id)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: t.bg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected ? t.accent : t.border,
+                        width: isSelected ? 2.2 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(radius: 8, backgroundColor: t.accent),
+                        const SizedBox(width: 8),
+                        Text(
+                          s.isArabicUi ? t.nameAr : t.nameEn,
+                          style: TextStyle(
+                            color: t.textPrimary,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 2. Audio Settings Group (matching Screenshot 2 bottom-right)
+          Text(
+            s.tr('Audio Settings (64+ Reciters)', 'إعدادات الصوت والقراء'),
+            style: TextStyle(
+              color: p.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: p.border),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(Icons.record_voice_over, color: p.accent),
+                  title: Text(
+                    s.tr('Reciter', 'القارئ'),
+                    style: TextStyle(color: p.textPrimary),
+                  ),
+                  subtitle: Text(
+                    '${s.selectedReciter.nameEn} (${s.reciters.length} Available)',
+                    style: TextStyle(color: p.accent, fontSize: 12.5),
+                  ),
+                  trailing: DropdownButtonHideUnderline(
+                    child: DropdownButton<ReciterOption>(
+                      dropdownColor: p.card,
+                      value: s.selectedReciter,
+                      items: s.reciters
+                          .map(
+                            (r) => DropdownMenuItem(
+                              value: r,
+                              child: Text(
+                                r.nameEn,
+                                style: TextStyle(
+                                  color: p.textPrimary,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (r) {
+                        if (r != null) setState(() => s.setReciter(r));
+                      },
+                    ),
+                  ),
+                ),
+                Divider(color: p.border, height: 1),
+                ListTile(
+                  leading: Icon(Icons.speed, color: p.accent),
+                  title: Text(
+                    s.tr('Playback Speed', 'سرعة التلاوة'),
+                    style: TextStyle(color: p.textPrimary),
+                  ),
+                  trailing: Text(
+                    '${s.playbackSpeed}x >',
+                    style: TextStyle(color: p.accent, fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () {
+                    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+                    final next =
+                        speeds[(speeds.indexOf(s.playbackSpeed) + 1) % speeds.length];
+                    setState(() => s.setPlaybackSpeed(next));
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 3. Reading Settings (Hafs & Warsh Mushaf, 34+ Languages, 184+ Tafsir)
+          Text(
+            s.tr('Reading & Mushaf Settings', 'إعدادات المصحف واللغات والتفسير'),
+            style: TextStyle(
+              color: p.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: p.border),
+            ),
+            child: Column(
+              children: [
+                // Hafs & Warsh King Fahd Complex Selector
+                ListTile(
+                  leading: Icon(Icons.menu_book, color: p.accent),
+                  title: Text(
+                    s.tr('Mushaf Edition (Hafs & Warsh)', 'رواية المصحف (حفص وورش)'),
+                    style: TextStyle(color: p.textPrimary),
+                  ),
+                  subtitle: Text(
+                    s.currentMushaf.nameEn,
+                    style: TextStyle(color: p.accent, fontSize: 12.5),
+                  ),
+                  trailing: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      dropdownColor: p.card,
+                      value: s.selectedMushafId,
+                      items: s.mushafEditions
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m.id,
+                              child: Text(
+                                m.riwayah,
+                                style: TextStyle(color: p.textPrimary),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => s.setMushafEdition(val));
+                      },
+                    ),
+                  ),
+                ),
+                Divider(color: p.border, height: 1),
+
+                // 34+ Global Languages Selector
+                ListTile(
+                  leading: Icon(Icons.public, color: p.accent),
+                  title: Text(
+                    s.tr('Global Languages (36+)', 'لغات العالم والترجمة'),
+                    style: TextStyle(color: p.textPrimary),
+                  ),
+                  subtitle: Text(
+                    'Active: ${s.selectedLanguageCode.toUpperCase()}',
+                    style: TextStyle(color: p.textSecondary, fontSize: 12),
+                  ),
+                  trailing: DropdownButtonHideUnderline(
+                    child: DropdownButton<GlobalLanguageOption>(
+                      dropdownColor: p.card,
+                      value: s.globalLanguages.firstWhere(
+                        (l) => l.code == s.selectedLanguageCode,
+                        orElse: () => s.globalLanguages[1],
+                      ),
+                      items: s.globalLanguages
+                          .map(
+                            (l) => DropdownMenuItem(
+                              value: l,
+                              child: Text(
+                                '${l.nameEn} (${l.nativeName})',
+                                style: TextStyle(
+                                  color: p.textPrimary,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (lang) {
+                        if (lang != null) {
+                          s.switchLanguageAndDownloadTranslation(lang);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                Divider(color: p.border, height: 1),
+
+                // 184+ Tafsir & Translation Sources Browser
+                ListTile(
+                  leading: Icon(Icons.library_books_outlined, color: p.accent),
+                  title: Text(
+                    s.tr('184+ Tafsir & Translation Sources', '١٨٤+ مصدر للتفسير والترجمة'),
+                    style: TextStyle(color: p.textPrimary),
+                  ),
+                  subtitle: Text(
+                    'Ibn Kathir, Qurtubi, Jalalayn, Muyassar & more',
+                    style: TextStyle(color: p.textSecondary, fontSize: 12),
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: p.accent),
+                  onTap: () => _show184TafsirAndTranslationsModal(s, p),
+                ),
+                Divider(color: p.border, height: 1),
+
+                // Word Highlighting & Pronunciation Toggle
+                SwitchListTile(
+                  activeColor: p.accent,
+                  title: Text(
+                    s.tr(
+                      'Word Highlighting & Pronunciation',
+                      'تظليل الكلمات والنطق الصوتي للمتعلمين',
+                    ),
+                    style: TextStyle(color: p.textPrimary, fontSize: 14.5),
+                  ),
+                  value: s.wordByWordEnabled,
+                  onChanged: (_) => setState(() => s.toggleWordByWord()),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Quick Access to Prayer Times, Qibla, Hifz & Khatmah Plans
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: p.card,
+                    foregroundColor: p.accent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.explore),
+                  label: Text(s.tr('Prayer & Qibla', 'الصلاة والقبلة')),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: Text(s.tr('Prayer & Qibla', 'الصلاة والقبلة'))),
+                          body: PrayerQiblaScreen(appState: s),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: p.card,
+                    foregroundColor: p.accent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.school),
+                  label: Text(s.tr('Hifz & Khatmah', 'الحفظ والختمة')),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: Text(s.tr('Hifz & Khatmah', 'الحفظ والختمة'))),
+                          body: HifzAndKhatmaScreen(appState: s),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class HifzAndKhatmaScreen extends StatefulWidget {
   final AppState appState;
@@ -10,103 +1001,96 @@ class HifzAndKhatmaScreen extends StatefulWidget {
 }
 
 class _HifzAndKhatmaScreenState extends State<HifzAndKhatmaScreen> {
-  int _selectedSurah = 114;
+  int _selectedSurah = 1;
   bool _hideTextForTesting = true;
   final Set<String> _temporarilyRevealed = {};
 
   @override
   Widget build(BuildContext context) {
     final s = widget.appState;
+    final p = s.palette;
     final ayahs = s.surahMap[_selectedSurah] ?? [];
     final progressRatio = (s.khatmaCompletedPages / 604.0).clamp(0.0, 1.0);
 
-    return ListView(
-      padding: const EdgeInsets.all(14),
-      children: [
-        // Khatma Tracker Card
-        Card(
-          child: Padding(
+    return Container(
+      color: p.bg,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: p.border),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.track_changes, color: Color(0xFFD4AF37)),
-                    const SizedBox(width: 8),
-                    Text(
-                      s.tr('Khatma & Daily Wird Tracker', 'متابعة الختمة والورد اليومي'),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                Text(
+                  s.tr('Quran Reading Plans & Khatmah', 'خطط ختم القرآن والورد اليومي'),
+                  style: TextStyle(
+                    color: p.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 LinearProgressIndicator(
                   value: progressRatio,
                   minHeight: 10,
+                  backgroundColor: p.bg,
+                  color: p.accent,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
-                  '${s.khatmaCompletedPages} / 604 ${s.tr("Pages Read", "صفحة مقروءة")} (${(progressRatio * 100).toStringAsFixed(1)}%) • ${s.tr("Daily Goal", "الهدف اليومي")}: ${s.khatmaDailyGoalPages} ${s.tr("pages", "صفحات")}',
+                  '${s.khatmaCompletedPages} / 604 Pages (${(progressRatio * 100).toStringAsFixed(1)}%)',
+                  style: TextStyle(color: p.textSecondary),
                 ),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: Text(
-                        '+${s.khatmaDailyGoalPages} (${s.tr("Complete Daily Wird", "إتمام الورد اليومي")})',
-                      ),
-                      onPressed: () => setState(
-                        () => s.updateKhatmaProgress(
-                          s.khatmaCompletedPages + s.khatmaDailyGoalPages,
-                          s.khatmaDailyGoalPages,
-                        ),
-                      ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: p.accent,
+                    foregroundColor: Colors.black87,
+                  ),
+                  icon: const Icon(Icons.add),
+                  label: Text('+${s.khatmaDailyGoalPages} Pages Completed'),
+                  onPressed: () => setState(
+                    () => s.updateKhatmaProgress(
+                      s.khatmaCompletedPages + s.khatmaDailyGoalPages,
+                      s.khatmaDailyGoalPages,
                     ),
-                    OutlinedButton(
-                      onPressed: () => setState(
-                        () => s.updateKhatmaProgress(
-                          0,
-                          s.khatmaDailyGoalPages,
-                        ),
-                      ),
-                      child: Text(s.tr('Reset', 'إعادة ضبط')),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 14),
-
-        // Memorization (Hifz) Mode Card
-        Card(
-          child: Padding(
+          const SizedBox(height: 16),
+          Container(
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: p.border),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.psychology, color: Color(0xFFD4AF37)),
-                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        s.tr('Hifz (Memorization) Mode', 'وضع الحفظ والمراجعة'),
-                        style: const TextStyle(
-                          fontSize: 17,
+                        s.tr('Hifz Memorization Mode', 'وضع الحفظ والمراجعة'),
+                        style: TextStyle(
+                          color: p.textPrimary,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     Switch(
+                      activeColor: p.accent,
                       value: _hideTextForTesting,
                       onChanged: (v) => setState(() {
                         _hideTextForTesting = v;
@@ -115,62 +1099,20 @@ class _HifzAndKhatmaScreenState extends State<HifzAndKhatmaScreen> {
                     ),
                   ],
                 ),
-                Text(
-                  s.tr(
-                    'Toggle switch to hide verse words and tap any verse to reveal and check your memory.',
-                    'فعّل المفتاح لإخفاء الآيات واضغط على أي آية لإظهارها واختبار حفظك.',
-                  ),
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 10),
-                DropdownButton<int>(
-                  value: _selectedSurah,
-                  isExpanded: true,
-                  items: s.surahs
-                      .map(
-                        (surah) => DropdownMenuItem(
-                          value: surah.number,
-                          child: Text(
-                            '${surah.number}. ${surah.nameEn} (${surah.nameAr})',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedSurah = val;
-                        _temporarilyRevealed.clear();
-                      });
-                    }
-                  },
-                ),
-                const Divider(),
-                ...ayahs.take(40).map((item) {
-                  final isMemorized = s.memorizedAyahs.contains(item.key);
-                  final isHidden =
-                      _hideTextForTesting && !_temporarilyRevealed.contains(item.key);
+                ...ayahs.take(25).map((item) {
+                  final isHidden = _hideTextForTesting &&
+                      !_temporarilyRevealed.contains(item.key);
                   return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: IconButton(
-                      icon: Icon(
-                        isMemorized
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        color: isMemorized ? Colors.green : Colors.grey,
-                      ),
-                      onPressed: () =>
-                          setState(() => s.toggleMemorized(item.key)),
-                    ),
                     title: Directionality(
                       textDirection: TextDirection.rtl,
                       child: Text(
                         isHidden
-                            ? '•••••• ﴿${item.numberInSurah}﴾ (اضغط للإظهار / Tap to reveal)'
+                            ? '•••••• ﴿${item.numberInSurah}﴾ (Tap to reveal)'
                             : '${item.textUthmani} ﴿${item.numberInSurah}﴾',
                         style: TextStyle(
+                          color: p.textPrimary,
                           fontFamily: 'AmiriQuran',
-                          fontSize: s.quranFontSize - 2,
+                          fontSize: 22,
                         ),
                       ),
                     ),
@@ -188,255 +1130,8 @@ class _HifzAndKhatmaScreenState extends State<HifzAndKhatmaScreen> {
               ],
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class AzkarAndSettingsScreen extends StatefulWidget {
-  final AppState appState;
-  const AzkarAndSettingsScreen({super.key, required this.appState});
-
-  @override
-  State<AzkarAndSettingsScreen> createState() => _AzkarAndSettingsScreenState();
-}
-
-class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
-  final List<Map<String, String>> _azkarItems = const [
-    {
-      'categoryEn': 'Morning & Evening',
-      'categoryAr': 'أذكار الصباح والمساء',
-      'arabic': 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ (١٠٠ مرة)',
-      'meaning': 'Glory and praise be to Allah (100 times).',
-    },
-    {
-      'categoryEn': 'Morning Protection',
-      'categoryAr': 'ذكر الصباح',
-      'arabic': 'أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ',
-      'meaning': 'We have entered a new morning and with it all dominion belongs to Allah.',
-    },
-    {
-      'categoryEn': 'Evening Protection',
-      'categoryAr': 'ذكر المساء',
-      'arabic': 'أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ',
-      'meaning': 'We have entered the evening and with it all dominion belongs to Allah.',
-    },
-    {
-      'categoryEn': 'Seeking Forgiveness',
-      'categoryAr': 'الاستغفار',
-      'arabic': 'أَسْتَغْفِرُ اللَّهَ وَأَتُوبُ إِلَيْهِ (١٠٠ مرة)',
-      'meaning': 'I seek the forgiveness of Allah and repent to Him (100 times).',
-    },
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.appState;
-    final dayOfYear = DateTime.now().difference(DateTime(DateTime.now().year)).inDays;
-    final dailyAyah = s.allAyahs.isNotEmpty
-        ? s.allAyahs[dayOfYear % s.allAyahs.length]
-        : null;
-
-    return ListView(
-      padding: const EdgeInsets.all(14),
-      children: [
-        // Daily Verse Card
-        if (dailyAyah != null)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.wb_sunny, color: Color(0xFFD4AF37)),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${s.tr("Verse of the Day", "آية اليوم")} (${dailyAyah.key})',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: Text(
-                      dailyAyah.textUthmani,
-                      style: const TextStyle(
-                        fontFamily: 'AmiriQuran',
-                        fontSize: 22,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(dailyAyah.translationEn),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.notifications),
-                    label: Text(
-                      s.tr('Send Daily Verse Notification', 'إرسال تذكير آية اليوم'),
-                    ),
-                    onPressed: () {
-                      s.triggerInstantReminder(
-                        s.tr('Daily Quran Reminder', 'تذكير القرآن اليومي'),
-                        '${dailyAyah.textUthmani} (${dailyAyah.key})',
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        const SizedBox(height: 12),
-
-        // Digital Tasbih Card
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Text(
-                  s.tr('Digital Tasbih Counter', 'المسبحة الإلكترونية'),
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${s.tasbihCount}',
-                  style: const TextStyle(
-                    fontSize: 42,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFD4AF37),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.touch_app),
-                      label: Text(s.tr('Count (SubhanAllah)', 'تسبيح')),
-                      onPressed: () => setState(() => s.incrementTasbih()),
-                    ),
-                    const SizedBox(width: 12),
-                    TextButton(
-                      onPressed: () => setState(() => s.resetTasbih()),
-                      child: Text(s.tr('Reset', 'تصفير')),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // Morning & Evening Azkar
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.tr('Morning & Evening Azkar', 'أذكار الصباح والمساء'),
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                const Divider(),
-                ..._azkarItems.map(
-                  (z) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          s.isArabicUi ? z['categoryAr']! : z['categoryEn']!,
-                          style: const TextStyle(
-                            color: Color(0xFFD4AF37),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Directionality(
-                          textDirection: TextDirection.rtl,
-                          child: Text(
-                            z['arabic']!,
-                            style: const TextStyle(
-                              fontFamily: 'AmiriQuran',
-                              fontSize: 20,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          z['meaning']!,
-                          style: const TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // App Preferences & Settings
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.tr('Appearance & Reading Settings', 'إعدادات المظهر والقراءة'),
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                SwitchListTile(
-                  title: Text(s.tr('Dark Mode', 'الوضع الليلي')),
-                  value: s.isDarkMode,
-                  onChanged: (_) => setState(() => s.toggleDarkMode()),
-                ),
-                SwitchListTile(
-                  title: Text(s.tr('Arabic Interface (RTL)', 'واجهة التطبيق بالعربية')),
-                  value: s.isArabicUi,
-                  onChanged: (_) => setState(() => s.toggleLanguage()),
-                ),
-                SwitchListTile(
-                  title: Text(
-                    s.tr('Keep Screen On While Reading', 'إبقاء الشاشة مضاءة أثناء القراءة'),
-                  ),
-                  value: s.keepScreenOn,
-                  onChanged: (_) => setState(() => s.toggleKeepScreenOn()),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    children: [
-                      Text(s.tr('Quran Font Size', 'حجم خط المصحف')),
-                      Expanded(
-                        child: Slider(
-                          min: 18.0,
-                          max: 40.0,
-                          value: s.quranFontSize,
-                          onChanged: (v) => setState(() => s.updateFontSize(v)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
