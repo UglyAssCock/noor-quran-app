@@ -1,7 +1,7 @@
 name: noor_quran_companion
 description: Full-featured offline-ready Quran, Tafsir, Audio, Prayer Times, Qibla, Hifz, and Azkar app.
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -31,16 +31,16 @@ flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/images/app_icon.png"
-  adaptive_icon_background: "#0B3B2E"
+  adaptive_icon_background: "#0B8457"
   adaptive_icon_foreground: "assets/images/app_icon.png"
 
 flutter_native_splash:
-  color: "#0B3B2E"
-  color_dark: "#071E18"
+  color: "#041A15"
+  color_dark: "#041A15"
   image: "assets/images/app_icon.png"
   android_12:
-    color: "#0B3B2E"
-    icon_background_color: "#0B3B2E"
+    color: "#041A15"
+    icon_background_color: "#0B8457"
     image: "assets/images/app_icon.png"
 
 flutter:
