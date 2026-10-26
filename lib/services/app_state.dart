@@ -67,7 +67,7 @@ class TafsirSourceOption {
   final String identifier;
   final String name;
   final String language;
-  final String type; // 'tafsir' or 'translation'
+  final String type;
 
   const TafsirSourceOption({
     required this.identifier,
@@ -118,6 +118,7 @@ class SurahMeta {
   final String meaningEn;
   final String revelationType;
   final int ayahCount;
+  final int startPage;
 
   SurahMeta({
     required this.number,
@@ -126,6 +127,7 @@ class SurahMeta {
     required this.meaningEn,
     required this.revelationType,
     required this.ayahCount,
+    this.startPage = 1,
   });
 }
 
@@ -164,7 +166,7 @@ class AppState extends ChangeNotifier {
   bool isArabicUi = false;
   bool keepScreenOn = true;
   bool wordByWordEnabled = true;
-  double quranFontSize = 26.0;
+  double quranFontSize = 24.0;
   double playbackSpeed = 1.0;
   double autoScrollSpeed = 1.5;
 
@@ -172,7 +174,7 @@ class AppState extends ChangeNotifier {
   String selectedMushafId = 'hafs_kfgqpc';
   String selectedLanguageCode = 'en';
   String selectedTafsirId = 'ar.muyassar';
-  String activeQuickTafsirTab = 'ibn_kathir'; // 'ibn_kathir', 'qurtubi', 'jalalayn', 'muyassar'
+  String activeQuickTafsirTab = 'ibn_kathir';
 
   List<SurahMeta> surahs = [];
   List<AyahItem> allAyahs = [];
@@ -180,7 +182,6 @@ class AppState extends ChangeNotifier {
   Map<int, List<AyahItem>> pageMap = {};
   Map<int, List<AyahItem>> juzMap = {};
 
-  // Dynamic cached translations/tafsirs from the 184+ catalog
   Map<String, Map<String, String>> customEditionCache = {};
   List<TafsirSourceOption> catalogEditions = [];
 
@@ -203,7 +204,6 @@ class AppState extends ChangeNotifier {
   String selectedReadingPlan = '30 Days Khatmah Plan';
   int tasbihCount = 0;
 
-  // 6 Custom Color Themes (Default matches uploaded screenshots)
   final List<AppThemePalette> themes = const [
     AppThemePalette(
       id: 'emerald_night',
@@ -281,7 +281,6 @@ class AppState extends ChangeNotifier {
 
   bool get isDarkMode => !palette.isLight;
 
-  // King Fahd Complex Hafs, Warsh & Qira'at Mushaf Editions
   final List<MushafEdition> mushafEditions = const [
     MushafEdition(
       id: 'hafs_kfgqpc',
@@ -325,7 +324,6 @@ class AppState extends ChangeNotifier {
         orElse: () => mushafEditions.first,
       );
 
-  // 36 Global Languages
   final List<GlobalLanguageOption> globalLanguages = const [
     GlobalLanguageOption(code: 'ar', nameEn: 'Arabic', nativeName: 'العربية', defaultEdition: 'ar.muyassar'),
     GlobalLanguageOption(code: 'en', nameEn: 'English', nativeName: 'English', defaultEdition: 'en.sahih'),
@@ -365,7 +363,6 @@ class AppState extends ChangeNotifier {
     GlobalLanguageOption(code: 'tg', nameEn: 'Tajik', nativeName: 'Тоҷикӣ', defaultEdition: 'tg.ayati'),
   ];
 
-  // 65 World-Famous Reciters
   final List<ReciterOption> reciters = const [
     ReciterOption(id: 'alafasy', nameEn: 'Mishary Rashid Alafasy', nameAr: 'مشاري راشد العفاسي', subfolder: 'Alafasy_128kbps', fullSurahBaseUrl: 'https://server8.mp3quran.net/afs'),
     ReciterOption(id: 'maher', nameEn: 'Maher Al-Muaiqly', nameAr: 'ماهر المعيقلي', subfolder: 'MaherAlMuaiqly128kbps', fullSurahBaseUrl: 'https://server12.mp3quran.net/maher'),
@@ -451,7 +448,7 @@ class AppState extends ChangeNotifier {
     isArabicUi = _prefs.getBool('isArabicUi') ?? false;
     keepScreenOn = _prefs.getBool('keepScreenOn') ?? true;
     wordByWordEnabled = _prefs.getBool('wordByWordEnabled') ?? true;
-    quranFontSize = _prefs.getDouble('quranFontSize') ?? 26.0;
+    quranFontSize = _prefs.getDouble('quranFontSize') ?? 24.0;
     playbackSpeed = _prefs.getDouble('playbackSpeed') ?? 1.0;
 
     bookmarks = (_prefs.getStringList('bookmarks') ?? ['2:255', '3:26', '16:43', '17:111']).toSet();
@@ -536,7 +533,6 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
-  // Normalize Arabic text for Smart Spelling-Based Search (ignores diacritics & Alef/Ya/Ta differences)
   String normalizeArabicForSearch(String input) {
     return input
         .replaceAll(RegExp(r'[\u064B-\u065F\u0670\u06D6-\u06ED]'), '')
@@ -548,7 +544,33 @@ class AppState extends ChangeNotifier {
         .trim();
   }
 
-  // Generate phonetic pronunciation guide for non-Arabic speakers & children
+  /// Strips the attached Basmala from Verse 1 in Surahs 2..114 (keeps it only in Surah 1 Al-Fatiha)
+  String _stripDuplicateBasmala(int surahNum, int ayahNumInSurah, String rawText) {
+    final text = rawText.trim();
+    if (surahNum == 1 || ayahNumInSurah != 1) {
+      return text;
+    }
+    final words = text.split(RegExp(r'\s+'));
+    if (words.length > 4) {
+      final w0 = normalizeArabicForSearch(words[0]);
+      final w1 = normalizeArabicForSearch(words[1]);
+      if (w0.startsWith('بسم') && w1.contains('الله')) {
+        return words.sublist(4).join(' ').trim();
+      }
+    }
+    return text;
+  }
+
+  String toArabicDigits(int number) {
+    const western = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const eastern = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    String str = number.toString();
+    for (int i = 0; i < 10; i++) {
+      str = str.replaceAll(western[i], eastern[i]);
+    }
+    return str;
+  }
+
   String pronounceArabicWord(String arabicWord) {
     final map = <String, String>{
       'بِسْمِ': 'Bismi',
@@ -771,6 +793,9 @@ class AppState extends ChangeNotifier {
         final sRev = sObj['revelationType'] as String;
         final List<dynamic> ayahsRaw = sObj['ayahs'];
 
+        final firstPage =
+            ayahsRaw.isNotEmpty ? (ayahsRaw.first['page'] as int) : 1;
+
         surahs.add(
           SurahMeta(
             number: sNum,
@@ -779,6 +804,7 @@ class AppState extends ChangeNotifier {
             meaningEn: sMeaning,
             revelationType: sRev,
             ayahCount: ayahsRaw.length,
+            startPage: firstPage,
           ),
         );
 
@@ -790,17 +816,22 @@ class AppState extends ChangeNotifier {
 
         for (int a = 0; a < ayahsRaw.length; a++) {
           final aObj = ayahsRaw[a];
+          final numInSurah = aObj['numberInSurah'] as int;
+          final rawUthmani = aObj['text'] as String;
+          final cleanedUthmani =
+              _stripDuplicateBasmala(sNum, numInSurah, rawUthmani);
+
           final item = AyahItem(
             surahNumber: sNum,
             surahNameAr: sNameAr,
             surahNameEn: sNameEn,
             surahMeaningEn: sMeaning,
             revelationType: sRev,
-            numberInSurah: aObj['numberInSurah'] as int,
+            numberInSurah: numInSurah,
             globalNumber: aObj['number'] as int,
             juz: aObj['juz'] as int,
             page: aObj['page'] as int,
-            textUthmani: aObj['text'] as String,
+            textUthmani: cleanedUthmani,
             translationEn: enAyahs[a]['text'] as String,
             translationFr: frAyahs[a]['text'] as String,
             tafsirAr: tafAyahs[a]['text'] as String,
@@ -817,7 +848,8 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> switchLanguageAndDownloadTranslation(GlobalLanguageOption lang) async {
+  Future<void> switchLanguageAndDownloadTranslation(
+      GlobalLanguageOption lang) async {
     selectedLanguageCode = lang.code;
     isArabicUi = (lang.code == 'ar' || lang.code == 'ur' || lang.code == 'fa');
     _prefs.setString('selectedLanguageCode', lang.code);
@@ -825,7 +857,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final url = Uri.parse('https://api.alquran.cloud/v1/quran/${lang.defaultEdition}');
+      final url =
+          Uri.parse('https://api.alquran.cloud/v1/quran/${lang.defaultEdition}');
       final res = await http.get(url);
       if (res.statusCode == 200) {
         final List<dynamic> sList = jsonDecode(res.body)['data']['surahs'];
