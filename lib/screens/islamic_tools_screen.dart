@@ -3,7 +3,6 @@ import '../services/app_state.dart';
 import 'quran_reader_screen.dart';
 import 'prayer_qibla_screen.dart';
 
-/// Home Dashboard matching Screenshot 2 (Top-2nd screen)
 class HomeDashboardScreen extends StatelessWidget {
   final AppState appState;
   final ValueChanged<int> onNavigateTab;
@@ -41,7 +40,6 @@ class HomeDashboardScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Top Bismillah Hero Card with Mosque Arch Illustration
           GestureDetector(
             onTap: () => _openSurah(context, 1, 1),
             child: Container(
@@ -103,8 +101,6 @@ class HomeDashboardScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // 4 Quick Action Buttons (Read Quran | Listen Audio | Bookmarks | Settings)
           Row(
             children: [
               _buildQuickActionCard(
@@ -137,8 +133,6 @@ class HomeDashboardScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Continue Reading Section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -181,7 +175,7 @@ class HomeDashboardScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${s.tr("Surah", "سورة")} ${s.lastSurah} • ${s.tr("Verse", "آية")} ${s.lastAyah}',
+                          '${s.tr("Page", "صفحة")} ${s.lastPage} • ${s.tr("Surah", "سورة")} ${s.lastSurah}:${s.lastAyah}',
                           style: TextStyle(
                             color: p.textPrimary,
                             fontWeight: FontWeight.bold,
@@ -197,7 +191,8 @@ class HomeDashboardScreen extends StatelessWidget {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: LinearProgressIndicator(
-                            value: (s.khatmaCompletedPages / 604.0).clamp(0.05, 1.0),
+                            value:
+                                (s.khatmaCompletedPages / 604.0).clamp(0.05, 1.0),
                             minHeight: 6,
                             backgroundColor: p.bg,
                             color: p.accent,
@@ -213,8 +208,6 @@ class HomeDashboardScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-
-          // Daily Verse Card with Share-as-Image Button
           Text(
             s.tr('Daily Verse', 'آية اليوم'),
             style: TextStyle(
@@ -246,8 +239,9 @@ class HomeDashboardScreen extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        tooltip: s.tr('Share as Image', 'مشاركة كصورة'),
-                        icon: Icon(Icons.share_outlined, color: p.accent, size: 20),
+                        tooltip: s.tr('Share as Image', 'حفظ كصورة'),
+                        icon: Icon(Icons.share_outlined,
+                            color: p.accent, size: 20),
                         onPressed: () =>
                             showShareVerseAsImageSheet(context, s, dailyAyah),
                       ),
@@ -319,7 +313,6 @@ class HomeDashboardScreen extends StatelessWidget {
   }
 }
 
-/// Bookmarks & Reflections Screen matching Screenshot 2 (Bottom-2nd screen)
 class BookmarksAndNotesScreen extends StatefulWidget {
   final AppState appState;
   const BookmarksAndNotesScreen({super.key, required this.appState});
@@ -342,7 +335,6 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Verses | Surahs Pill Switcher
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -365,7 +357,8 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
                       child: Text(
                         s.tr('Verses & Notes', 'الآيات والملاحظات'),
                         style: TextStyle(
-                          color: _showVersesTab ? Colors.black87 : p.textSecondary,
+                          color:
+                              _showVersesTab ? Colors.black87 : p.textSecondary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -385,7 +378,9 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
                       child: Text(
                         s.tr('Surahs', 'السور المحفوظة'),
                         style: TextStyle(
-                          color: !_showVersesTab ? Colors.black87 : p.textSecondary,
+                          color: !_showVersesTab
+                              ? Colors.black87
+                              : p.textSecondary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -454,6 +449,7 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
                 MaterialPageRoute(
                   builder: (_) => ActiveMushafView(
                     appState: s,
+                    initialPage: ayah.page,
                     initialSurah: sNum,
                     highlightAyah: aNum,
                   ),
@@ -553,7 +549,7 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
               ),
             ),
             subtitle: Text(
-              '${meta.ayahCount} Verses • ${meta.revelationType}',
+              '${meta.ayahCount} Verses • Page ${meta.startPage}',
               style: TextStyle(color: p.textSecondary),
             ),
             trailing: IconButton(
@@ -565,6 +561,7 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
                 MaterialPageRoute(
                   builder: (_) => ActiveMushafView(
                     appState: s,
+                    initialPage: meta.startPage,
                     initialSurah: sNum,
                   ),
                 ),
@@ -577,7 +574,7 @@ class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
   }
 }
 
-/// Settings, 6 Themes, Hafs/Warsh Mushaf, 34+ Languages, 184+ Tafsir & Tools Screen
+/// Fixed Settings Screen (No squished vertical text — uses clean tap-to-open selection modals)
 class AzkarAndSettingsScreen extends StatefulWidget {
   final AppState appState;
   const AzkarAndSettingsScreen({super.key, required this.appState});
@@ -587,6 +584,202 @@ class AzkarAndSettingsScreen extends StatefulWidget {
 }
 
 class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
+  void _showReciterPickerModal(AppState s, AppThemePalette p) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: p.bg,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.72,
+        builder: (ctx, scrollCtrl) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.tr(
+                    'Select Reciter (${s.reciters.length} Famous Reciters)',
+                    'اختر القارئ (${s.reciters.length} قارئاً)',
+                  ),
+                  style: TextStyle(
+                    color: p.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: s.reciters.length,
+                    itemBuilder: (_, idx) {
+                      final r = s.reciters[idx];
+                      final isSelected = r.id == s.selectedReciter.id;
+                      return Card(
+                        color: p.card,
+                        child: ListTile(
+                          leading: Icon(
+                            isSelected
+                                ? Icons.check_circle
+                                : Icons.record_voice_over_outlined,
+                            color: isSelected ? p.accent : p.textSecondary,
+                          ),
+                          title: Text(
+                            r.nameEn,
+                            style: TextStyle(
+                              color: p.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            r.nameAr,
+                            style: TextStyle(color: p.accent, fontSize: 13),
+                          ),
+                          onTap: () {
+                            setState(() => s.setReciter(r));
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showMushafEditionPickerModal(AppState s, AppThemePalette p) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: p.bg,
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                s.tr(
+                  'Select Mushaf Edition (King Fahd Complex)',
+                  'اختر رواية المصحف (مجمع الملك فهد)',
+                ),
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ...s.mushafEditions.map((m) {
+                final selected = m.id == s.selectedMushafId;
+                return Card(
+                  color: p.card,
+                  child: ListTile(
+                    leading: Icon(
+                      selected ? Icons.check_circle : Icons.menu_book_outlined,
+                      color: selected ? p.accent : p.textSecondary,
+                    ),
+                    title: Text(
+                      m.nameEn,
+                      style: TextStyle(color: p.textPrimary, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      m.nameAr,
+                      style: TextStyle(color: p.accent, fontSize: 12.5),
+                    ),
+                    onTap: () {
+                      setState(() => s.setMushafEdition(m.id));
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showLanguagePickerModal(AppState s, AppThemePalette p) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: p.bg,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.72,
+        builder: (ctx, scrollCtrl) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.tr(
+                    'Select Global Language (${s.globalLanguages.length}+ Languages)',
+                    'اختر لغة الترجمة والواجهة',
+                  ),
+                  style: TextStyle(
+                    color: p.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: s.globalLanguages.length,
+                    itemBuilder: (_, idx) {
+                      final lang = s.globalLanguages[idx];
+                      final isSelected = lang.code == s.selectedLanguageCode;
+                      return Card(
+                        color: p.card,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: p.bg,
+                            child: Text(
+                              lang.code.toUpperCase(),
+                              style: TextStyle(
+                                color: p.accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            '${lang.nameEn} (${lang.nativeName})',
+                            style: TextStyle(color: p.textPrimary),
+                          ),
+                          trailing: isSelected
+                              ? Icon(Icons.check_circle, color: p.accent)
+                              : null,
+                          onTap: () {
+                            s.switchLanguageAndDownloadTranslation(lang);
+                            Navigator.pop(ctx);
+                            setState(() {});
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _show184TafsirAndTranslationsModal(AppState s, AppThemePalette p) {
     s.fetchAll184CatalogEditionsOnline();
     showModalBottomSheet(
@@ -636,18 +829,27 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
                           ),
                           title: Text(
                             ed.name,
-                            style: TextStyle(color: p.textPrimary, fontSize: 14),
+                            style:
+                                TextStyle(color: p.textPrimary, fontSize: 14),
                           ),
                           subtitle: Text(
                             '${ed.type.toUpperCase()} • ${ed.identifier}',
-                            style: TextStyle(color: p.textSecondary, fontSize: 12),
+                            style: TextStyle(
+                              color: p.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
-                          trailing: Icon(Icons.cloud_download_outlined, color: p.accent),
+                          trailing: Icon(
+                            Icons.cloud_download_outlined,
+                            color: p.accent,
+                          ),
                           onTap: () {
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Activated ${ed.name} (${ed.identifier})'),
+                                content: Text(
+                                  'Activated ${ed.name} (${ed.identifier})',
+                                ),
                               ),
                             );
                           },
@@ -660,6 +862,55 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildCleanSettingTile({
+    required AppThemePalette p,
+    required IconData icon,
+    required String title,
+    required String valueText,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: p.accent, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: p.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    valueText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: p.accent,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, color: p.textSecondary, size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -733,9 +984,9 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // 2. Audio Settings Group (matching Screenshot 2 bottom-right)
+          // 2. Audio Settings Group (Fixed wide row layout)
           Text(
-            s.tr('Audio Settings (64+ Reciters)', 'إعدادات الصوت والقراء'),
+            s.tr('Audio Settings (65 Reciters)', 'إعدادات الصوت والقراء'),
             style: TextStyle(
               color: p.textPrimary,
               fontWeight: FontWeight.bold,
@@ -744,7 +995,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
           ),
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: p.card,
               borderRadius: BorderRadius.circular(18),
@@ -752,55 +1002,24 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
             ),
             child: Column(
               children: [
-                ListTile(
-                  leading: Icon(Icons.record_voice_over, color: p.accent),
-                  title: Text(
-                    s.tr('Reciter', 'القارئ'),
-                    style: TextStyle(color: p.textPrimary),
-                  ),
-                  subtitle: Text(
-                    '${s.selectedReciter.nameEn} (${s.reciters.length} Available)',
-                    style: TextStyle(color: p.accent, fontSize: 12.5),
-                  ),
-                  trailing: DropdownButtonHideUnderline(
-                    child: DropdownButton<ReciterOption>(
-                      dropdownColor: p.card,
-                      value: s.selectedReciter,
-                      items: s.reciters
-                          .map(
-                            (r) => DropdownMenuItem(
-                              value: r,
-                              child: Text(
-                                r.nameEn,
-                                style: TextStyle(
-                                  color: p.textPrimary,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (r) {
-                        if (r != null) setState(() => s.setReciter(r));
-                      },
-                    ),
-                  ),
+                _buildCleanSettingTile(
+                  p: p,
+                  icon: Icons.record_voice_over,
+                  title: s.tr('Reciter', 'القارئ'),
+                  valueText:
+                      '${s.selectedReciter.nameEn} (${s.selectedReciter.nameAr})',
+                  onTap: () => _showReciterPickerModal(s, p),
                 ),
                 Divider(color: p.border, height: 1),
-                ListTile(
-                  leading: Icon(Icons.speed, color: p.accent),
-                  title: Text(
-                    s.tr('Playback Speed', 'سرعة التلاوة'),
-                    style: TextStyle(color: p.textPrimary),
-                  ),
-                  trailing: Text(
-                    '${s.playbackSpeed}x >',
-                    style: TextStyle(color: p.accent, fontWeight: FontWeight.bold),
-                  ),
+                _buildCleanSettingTile(
+                  p: p,
+                  icon: Icons.speed,
+                  title: s.tr('Playback Speed', 'سرعة التلاوة'),
+                  valueText: '${s.playbackSpeed}x',
                   onTap: () {
                     const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
-                    final next =
-                        speeds[(speeds.indexOf(s.playbackSpeed) + 1) % speeds.length];
+                    final next = speeds[
+                        (speeds.indexOf(s.playbackSpeed) + 1) % speeds.length];
                     setState(() => s.setPlaybackSpeed(next));
                   },
                 ),
@@ -809,7 +1028,7 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // 3. Reading Settings (Hafs & Warsh Mushaf, 34+ Languages, 184+ Tafsir)
+          // 3. Reading & Mushaf Settings Group
           Text(
             s.tr('Reading & Mushaf Settings', 'إعدادات المصحف واللغات والتفسير'),
             style: TextStyle(
@@ -820,7 +1039,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
           ),
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: p.card,
               borderRadius: BorderRadius.circular(18),
@@ -828,99 +1046,68 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
             ),
             child: Column(
               children: [
-                // Hafs & Warsh King Fahd Complex Selector
-                ListTile(
-                  leading: Icon(Icons.menu_book, color: p.accent),
-                  title: Text(
-                    s.tr('Mushaf Edition (Hafs & Warsh)', 'رواية المصحف (حفص وورش)'),
-                    style: TextStyle(color: p.textPrimary),
+                _buildCleanSettingTile(
+                  p: p,
+                  icon: Icons.menu_book,
+                  title: s.tr(
+                    'Mushaf Edition (Hafs & Warsh)',
+                    'رواية المصحف (حفص وورش)',
                   ),
-                  subtitle: Text(
-                    s.currentMushaf.nameEn,
-                    style: TextStyle(color: p.accent, fontSize: 12.5),
-                  ),
-                  trailing: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      dropdownColor: p.card,
-                      value: s.selectedMushafId,
-                      items: s.mushafEditions
-                          .map(
-                            (m) => DropdownMenuItem(
-                              value: m.id,
-                              child: Text(
-                                m.riwayah,
-                                style: TextStyle(color: p.textPrimary),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => s.setMushafEdition(val));
-                      },
-                    ),
-                  ),
+                  valueText: s.currentMushaf.nameEn,
+                  onTap: () => _showMushafEditionPickerModal(s, p),
                 ),
                 Divider(color: p.border, height: 1),
-
-                // 34+ Global Languages Selector
-                ListTile(
-                  leading: Icon(Icons.public, color: p.accent),
-                  title: Text(
-                    s.tr('Global Languages (36+)', 'لغات العالم والترجمة'),
-                    style: TextStyle(color: p.textPrimary),
+                _buildCleanSettingTile(
+                  p: p,
+                  icon: Icons.public,
+                  title: s.tr(
+                    'Global Languages (36+ Languages)',
+                    'لغات العالم والترجمة',
                   ),
-                  subtitle: Text(
-                    'Active: ${s.selectedLanguageCode.toUpperCase()}',
-                    style: TextStyle(color: p.textSecondary, fontSize: 12),
-                  ),
-                  trailing: DropdownButtonHideUnderline(
-                    child: DropdownButton<GlobalLanguageOption>(
-                      dropdownColor: p.card,
-                      value: s.globalLanguages.firstWhere(
-                        (l) => l.code == s.selectedLanguageCode,
-                        orElse: () => s.globalLanguages[1],
-                      ),
-                      items: s.globalLanguages
-                          .map(
-                            (l) => DropdownMenuItem(
-                              value: l,
-                              child: Text(
-                                '${l.nameEn} (${l.nativeName})',
-                                style: TextStyle(
-                                  color: p.textPrimary,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (lang) {
-                        if (lang != null) {
-                          s.switchLanguageAndDownloadTranslation(lang);
-                        }
-                      },
-                    ),
-                  ),
+                  valueText:
+                      'Active Language: ${s.selectedLanguageCode.toUpperCase()}',
+                  onTap: () => _showLanguagePickerModal(s, p),
                 ),
                 Divider(color: p.border, height: 1),
-
-                // 184+ Tafsir & Translation Sources Browser
-                ListTile(
-                  leading: Icon(Icons.library_books_outlined, color: p.accent),
-                  title: Text(
-                    s.tr('184+ Tafsir & Translation Sources', '١٨٤+ مصدر للتفسير والترجمة'),
-                    style: TextStyle(color: p.textPrimary),
+                _buildCleanSettingTile(
+                  p: p,
+                  icon: Icons.library_books_outlined,
+                  title: s.tr(
+                    '184+ Tafsir & Translation Sources',
+                    '١٨٤+ مصدر للتفسير والترجمة',
                   ),
-                  subtitle: Text(
-                    'Ibn Kathir, Qurtubi, Jalalayn, Muyassar & more',
-                    style: TextStyle(color: p.textSecondary, fontSize: 12),
-                  ),
-                  trailing: Icon(Icons.chevron_right, color: p.accent),
+                  valueText: 'Ibn Kathir, Qurtubi, Jalalayn, Muyassar & more',
                   onTap: () => _show184TafsirAndTranslationsModal(s, p),
                 ),
                 Divider(color: p.border, height: 1),
-
-                // Word Highlighting & Pronunciation Toggle
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.format_size, color: p.accent, size: 22),
+                      const SizedBox(width: 12),
+                      Text(
+                        s.tr('Mushaf Font Size', 'حجم خط المصحف'),
+                        style: TextStyle(
+                          color: p.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          activeColor: p.accent,
+                          min: 18.0,
+                          max: 36.0,
+                          value: s.quranFontSize,
+                          onChanged: (v) =>
+                              setState(() => s.updateFontSize(v)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(color: p.border, height: 1),
                 SwitchListTile(
                   activeColor: p.accent,
                   title: Text(
@@ -928,7 +1115,7 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
                       'Word Highlighting & Pronunciation',
                       'تظليل الكلمات والنطق الصوتي للمتعلمين',
                     ),
-                    style: TextStyle(color: p.textPrimary, fontSize: 14.5),
+                    style: TextStyle(color: p.textPrimary, fontSize: 14),
                   ),
                   value: s.wordByWordEnabled,
                   onChanged: (_) => setState(() => s.toggleWordByWord()),
@@ -938,7 +1125,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Quick Access to Prayer Times, Qibla, Hifz & Khatmah Plans
           Row(
             children: [
               Expanded(
@@ -954,7 +1140,10 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text(s.tr('Prayer & Qibla', 'الصلاة والقبلة'))),
+                          appBar: AppBar(
+                            title:
+                                Text(s.tr('Prayer & Qibla', 'الصلاة والقبلة')),
+                          ),
                           body: PrayerQiblaScreen(appState: s),
                         ),
                       ),
@@ -976,7 +1165,10 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text(s.tr('Hifz & Khatmah', 'الحفظ والختمة'))),
+                          appBar: AppBar(
+                            title:
+                                Text(s.tr('Hifz & Khatmah', 'الحفظ والختمة')),
+                          ),
                           body: HifzAndKhatmaScreen(appState: s),
                         ),
                       ),
@@ -1028,7 +1220,10 @@ class _HifzAndKhatmaScreenState extends State<HifzAndKhatmaScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  s.tr('Quran Reading Plans & Khatmah', 'خطط ختم القرآن والورد اليومي'),
+                  s.tr(
+                    'Quran Reading Plans & Khatmah',
+                    'خطط ختم القرآن والورد اليومي',
+                  ),
                   style: TextStyle(
                     color: p.textPrimary,
                     fontSize: 17,
