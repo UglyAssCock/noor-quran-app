@@ -180,7 +180,7 @@ class _MosqueArchPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Captures the Verse + Tafsir card and saves it directly into the Android Gallery
+/// Captures the Verse + ONE single Tafsir card (even for huge verses like 2:282) and saves it to the Gallery
 Future<void> showShareVerseAsImageSheet(
   BuildContext context,
   AppState appState,
@@ -188,6 +188,88 @@ Future<void> showShareVerseAsImageSheet(
 ) async {
   final boundaryKey = GlobalKey();
   final p = appState.palette;
+  final singleTafsir = appState.getSingleTafsirForAyah(ayah);
+
+  // Dynamically scale font size so long verses (like 2:282) fit cleanly
+  final int len = ayah.textUthmani.length;
+  final double dynamicVerseFontSize = len > 600
+      ? 16.5
+      : len > 350
+          ? 19.0
+          : 23.5;
+
+  Future<void> captureAndSave(BuildContext modalCtx) async {
+    try {
+      await Future.delayed(const Duration(milliseconds: 80));
+      final boundary = boundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final ui.Image image = await boundary.toImage(pixelRatio: 2.8);
+      final ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      if (byteData != null) {
+        final pngBytes = byteData.buffer.asUint8List();
+        final fileName =
+            'NoorQuran_${ayah.surahNumber}_${ayah.numberInSurah}_${DateTime.now().millisecondsSinceEpoch}.png';
+        final savedLocation =
+            await appState.savePngToGallery(pngBytes, fileName);
+        if (modalCtx.mounted) Navigator.pop(modalCtx);
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (dCtx) => AlertDialog(
+              backgroundColor: p.card,
+              title: Row(
+                children: [
+                  Icon(Icons.check_circle, color: p.accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      appState.tr(
+                        'Saved to Gallery!',
+                        'تم الحفظ في معرض الصور!',
+                      ),
+                      style: TextStyle(color: p.accent, fontSize: 17),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      pngBytes,
+                      height: 170,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    savedLocation,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: p.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: p.accent,
+                    foregroundColor: Colors.black87,
+                  ),
+                  onPressed: () => Navigator.pop(dCtx),
+                  child: Text(appState.tr('Done', 'تم')),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    } catch (_) {}
+  }
 
   await showModalBottomSheet(
     context: context,
@@ -197,240 +279,195 @@ Future<void> showShareVerseAsImageSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (ctx) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              appState.tr(
-                'Save to Gallery',
-                'حفظ بطاقة الآية والتفسير في المعرض',
-              ),
-              style: TextStyle(
-                color: p.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 14),
-            RepaintBoundary(
-              key: boundaryKey,
-              child: Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [p.card, p.bg],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: p.accent.withOpacity(0.6),
-                    width: 1.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Header with Instant Save Button (Never hidden even on huge verses)
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        RubElHizbBadge(
-                          label: '${ayah.numberInSurah}',
-                          size: 36,
-                          color: p.accent,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${ayah.surahNameEn} (${ayah.key})',
-                            style: TextStyle(
-                              color: p.accent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          ayah.surahNameAr,
-                          style: TextStyle(
-                            color: p.textPrimary,
-                            fontFamily: 'AmiriQuran',
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Directionality(
-                      textDirection: TextDirection.rtl,
+                    Expanded(
                       child: Text(
-                        ayah.textUthmani,
-                        textAlign: TextAlign.center,
+                        appState.tr(
+                          'Save Verse & Tafsir Card',
+                          'حفظ بطاقة الآية والتفسير في المعرض',
+                        ),
                         style: TextStyle(
                           color: p.textPrimary,
-                          fontFamily: 'AmiriQuran',
-                          fontSize: 24,
-                          height: 1.9,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      ayah.translationEn,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: p.textSecondary,
-                        fontSize: 13.5,
-                        height: 1.4,
+                    IconButton(
+                      icon: Icon(Icons.close, color: p.textSecondary),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Scrollable Preview Area so Longest Verses (like 2:282) Never Overflow
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: RepaintBoundary(
+                      key: boundaryKey,
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [p.card, p.bg],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: p.accent.withOpacity(0.65),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                RubElHizbBadge(
+                                  label: '${ayah.numberInSurah}',
+                                  size: 36,
+                                  color: p.accent,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    '${ayah.surahNameEn} (${ayah.key})',
+                                    style: TextStyle(
+                                      color: p.accent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  ayah.surahNameAr,
+                                  style: TextStyle(
+                                    color: p.textPrimary,
+                                    fontFamily: 'AmiriQuran',
+                                    fontSize: 19,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: Text(
+                                ayah.textUthmani,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: p.textPrimary,
+                                  fontFamily: 'AmiriQuran',
+                                  fontSize: dynamicVerseFontSize,
+                                  height: 1.85,
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 24, color: Color(0xFF195A4B)),
+                            // SINGLE Tafsir / Explanation block (No duplicate!)
+                            Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: Text(
+                                'التفسير: ${ayah.tafsirAr}',
+                                textAlign: TextAlign.justify,
+                                style: TextStyle(
+                                  color: p.textSecondary,
+                                  fontSize: 13.5,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                            if (!appState.isRtlLanguage &&
+                                singleTafsir != ayah.tafsirAr) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                singleTafsir,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: p.textPrimary.withOpacity(0.88),
+                                  fontSize: 12.5,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                    const Divider(height: 22, color: Color(0xFF195A4B)),
-                    Directionality(
-                      textDirection: TextDirection.rtl,
-                      child: Text(
-                        'التفسير: ${ayah.tafsirAr}',
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: p.textPrimary.withOpacity(0.9),
-                          fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Pinned Bottom Action Bar (Always Visible)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: p.accent,
+                          side: BorderSide(color: p.accent),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
+                        icon: const Icon(Icons.copy, size: 18),
+                        label: Text(
+                          appState.tr('Copy Text + Tafsir', 'نسخ الآية والتفسير'),
+                        ),
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(
+                              text:
+                                  '${ayah.textUthmani} [${ayah.surahNameAr} ${ayah.key}]\n\nالتفسير: ${ayah.tafsirAr}',
+                            ),
+                          );
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                appState.tr(
+                                  'Copied Verse & Tafsir!',
+                                  'تم نسخ الآية والتفسير!',
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: p.accent,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.photo_library_outlined, size: 19),
+                        label: Text(
+                          appState.tr('Save to Gallery', 'حفظ في المعرض'),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => captureAndSave(ctx),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: p.accent,
-                      side: BorderSide(color: p.accent),
-                    ),
-                    icon: const Icon(Icons.copy),
-                    label: Text(
-                      appState.tr('Copy Text + Tafsir', 'نسخ النص والتفسير'),
-                    ),
-                    onPressed: () {
-                      Clipboard.setData(
-                        ClipboardData(
-                          text:
-                              '${ayah.textUthmani} [${ayah.surahNameEn} ${ayah.key}]\n\n${ayah.translationEn}\n\nالتفسير: ${ayah.tafsirAr}',
-                        ),
-                      );
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            appState.tr(
-                              'Copied Verse & Tafsir!',
-                              'تم نسخ الآية والتفسير!',
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: p.accent,
-                      foregroundColor: Colors.black87,
-                    ),
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: Text(
-                      appState.tr('Save to Gallery', 'حفظ في المعرض'),
-                    ),
-                    onPressed: () async {
-                      try {
-                        await Future.delayed(const Duration(milliseconds: 80));
-                        final boundary = boundaryKey.currentContext
-                            ?.findRenderObject() as RenderRepaintBoundary?;
-                        if (boundary == null) return;
-                        final ui.Image image =
-                            await boundary.toImage(pixelRatio: 3.0);
-                        final ByteData? byteData = await image.toByteData(
-                          format: ui.ImageByteFormat.png,
-                        );
-                        if (byteData != null) {
-                          final pngBytes = byteData.buffer.asUint8List();
-                          final fileName =
-                              'NoorQuran_${ayah.surahNumber}_${ayah.numberInSurah}_${DateTime.now().millisecondsSinceEpoch}.png';
-                          final savedLocation =
-                              await appState.savePngToGallery(pngBytes, fileName);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (context.mounted) {
-                            showDialog(
-                              context: context,
-                              builder: (dCtx) => AlertDialog(
-                                backgroundColor: p.card,
-                                title: Row(
-                                  children: [
-                                    Icon(Icons.check_circle, color: p.accent),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        appState.tr(
-                                          'Saved to Gallery!',
-                                          'تم الحفظ في معرض الصور!',
-                                        ),
-                                        style: TextStyle(
-                                          color: p.accent,
-                                          fontSize: 17,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.memory(
-                                        pngBytes,
-                                        height: 170,
-                                        fit: BoxFit.contain,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      savedLocation,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: p.textSecondary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                actions: [
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: p.accent,
-                                      foregroundColor: Colors.black87,
-                                    ),
-                                    onPressed: () => Navigator.pop(dCtx),
-                                    child: Text(appState.tr('Done', 'تم')),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                        }
-                      } catch (_) {}
-                    },
-                  ),
-                ),
               ],
             ),
-          ],
+          ),
         ),
       );
     },
@@ -524,7 +561,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                             'Read at least 1 page every day to keep your streak alive!',
                             'اقرأ صفحة واحدة على الأقل يومياً للحفاظ على سلسلتك المستمرة!',
                           ),
-                          style: TextStyle(color: p.textSecondary, fontSize: 12.5),
+                          style:
+                              TextStyle(color: p.textSecondary, fontSize: 12.5),
                         ),
                       ],
                     ),
@@ -532,9 +570,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                 ],
               ),
               const SizedBox(height: 18),
-              // 7-Day Consistency Calendar Row
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
                 decoration: BoxDecoration(
                   color: p.card,
                   borderRadius: BorderRadius.circular(16),
@@ -561,9 +599,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                         const SizedBox(height: 6),
                         CircleAvatar(
                           radius: 16,
-                          backgroundColor: active
-                              ? Colors.orangeAccent
-                              : p.bg,
+                          backgroundColor:
+                              active ? Colors.orangeAccent : p.bg,
                           child: Icon(
                             active
                                 ? Icons.local_fire_department_rounded
@@ -608,7 +645,10 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                           ),
                           Text(
                             s.tr('Best Streak', 'أطول سلسلة'),
-                            style: TextStyle(color: p.textSecondary, fontSize: 12),
+                            style: TextStyle(
+                              color: p.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -635,7 +675,10 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                           ),
                           Text(
                             s.tr('Pages Today', 'صفحات اليوم'),
-                            style: TextStyle(color: p.textSecondary, fontSize: 12),
+                            style: TextStyle(
+                              color: p.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -677,7 +720,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
         content: Text(
           s.tr(
             'Downloading ${surah.nameEn} (${s.selectedReciter.nameEn})...',
-            'جاري تحميل سورة ${surah.nameAr} (${s.selectedReciter.nameAr})...',
+            'جاري تحميل ${surah.nameAr} (${s.selectedReciter.nameAr})...',
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -691,7 +734,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
           ok
               ? s.tr(
                   '${surah.nameEn} saved for offline playback!',
-                  'تم حفظ سورة ${surah.nameAr} للاستماع بدون إنترنت!',
+                  'تم حفظ ${surah.nameAr} للاستماع بدون إنترنت!',
                 )
               : s.tr('Download failed. Check internet.', 'فشل التحميل.'),
         ),
@@ -1046,7 +1089,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                surah.nameAr.replaceAll('سُورَةُ ', ''),
+                surah.nameAr.replaceAll('سورة ', ''),
                 style: TextStyle(
                   color: p.textPrimary,
                   fontFamily: 'AmiriQuran',
@@ -1337,6 +1380,84 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
     } catch (_) {}
   }
 
+  /// Opens all 65 Reciters directly from the Audio Player Bar
+  void _showAudioBarReciterPicker(AppState s, AppThemePalette p) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: p.bg,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.72,
+        builder: (ctx, scrollCtrl) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${s.tr("Reciter", "اختر القارئ")} (${s.reciters.length})',
+                  style: TextStyle(
+                    color: p.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: s.reciters.length,
+                    itemBuilder: (_, idx) {
+                      final r = s.reciters[idx];
+                      final isSelected = r.id == s.selectedReciter.id;
+                      return Card(
+                        color: p.card,
+                        child: ListTile(
+                          leading: Icon(
+                            isSelected
+                                ? Icons.check_circle
+                                : Icons.record_voice_over_outlined,
+                            color: isSelected ? p.accent : p.textSecondary,
+                          ),
+                          title: Text(
+                            r.nameEn,
+                            style: TextStyle(
+                              color: p.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            r.nameAr,
+                            style: TextStyle(color: p.accent, fontSize: 13),
+                          ),
+                          onTap: () {
+                            setState(() => s.setReciter(r));
+                            Navigator.pop(ctx);
+                            if (_isPlaying) {
+                              if (_isPlayingFullSurahMode) {
+                                _playFullSurahAudio();
+                              } else if (_selectedAyah != null) {
+                                _playSpecificAyah(_selectedAyah!);
+                              }
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showAyahActionBottomSheet(AyahItem ayah) {
     final s = widget.appState;
     final p = s.palette;
@@ -1374,7 +1495,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            '${ayah.surahNameEn} (${ayah.key}) • ${s.tr("Page", "صفحة")} ${ayah.page}',
+                            '${ayah.surahNameAr} (${ayah.key}) • ${s.tr("Page", "صفحة")} ${ayah.page}',
                             style: TextStyle(
                               color: p.textPrimary,
                               fontWeight: FontWeight.bold,
@@ -1424,7 +1545,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                         style: TextStyle(
                           color: p.textPrimary,
                           fontFamily: 'AmiriQuran',
-                          fontSize: 25,
+                          fontSize: 24,
                           height: 1.9,
                         ),
                       ),
@@ -1453,22 +1574,17 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                         }).toList(),
                       ),
                     ],
-                    const SizedBox(height: 14),
-                    Text(
-                      ayah.translationEn,
-                      style: TextStyle(
-                        color: p.textPrimary.withOpacity(0.92),
-                        fontSize: 14.5,
-                        height: 1.45,
-                      ),
-                    ),
                     Divider(height: 24, color: p.border),
-                    Text(
-                      s.getTafsirForAyah(ayah),
-                      style: TextStyle(
-                        color: p.textSecondary,
-                        fontSize: 13.5,
-                        height: 1.5,
+                    // ONLY ONE Tafsir shown (No duplicate!)
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: Text(
+                        'التفسير: ${ayah.tafsirAr}',
+                        style: TextStyle(
+                          color: p.textSecondary,
+                          fontSize: 14,
+                          height: 1.55,
+                        ),
                       ),
                     ),
                   ],
@@ -1516,11 +1632,13 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              first?.surahNameEn ?? 'Mushaf',
+              first != null
+                  ? '${first.surahNameEn} • ${first.surahNameAr}'
+                  : 'Mushaf',
               style: TextStyle(
                 color: p.textPrimary,
                 fontWeight: FontWeight.bold,
-                fontSize: 17,
+                fontSize: 16,
               ),
             ),
             Text(
@@ -1879,7 +1997,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${item.surahNameEn} (${item.key})',
+                    '${item.surahNameAr} (${item.key})',
                     style: TextStyle(
                       color: p.accent,
                       fontWeight: FontWeight.bold,
@@ -1921,18 +2039,18 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                item.translationEn,
-                style: TextStyle(
-                  color: p.textPrimary.withOpacity(0.9),
-                  fontSize: 14,
-                ),
-              ),
               Divider(height: 20, color: p.border),
-              Text(
-                s.getTafsirForAyah(item),
-                style: TextStyle(color: p.textSecondary, fontSize: 13),
+              // ONLY ONE Tafsir / Translation block shown (No duplicate!)
+              Directionality(
+                textDirection: TextDirection.rtl,
+                child: Text(
+                  'التفسير: ${item.tafsirAr}',
+                  style: TextStyle(
+                    color: p.textSecondary,
+                    fontSize: 13.5,
+                    height: 1.5,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1960,21 +2078,46 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Tap anywhere on the Reciter bar to choose from all 65 Reciters!
             Row(
               children: [
-                Icon(Icons.mic, color: p.accent, size: 18),
-                const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    '${s.selectedReciter.nameEn} (${s.selectedReciter.nameAr})',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: p.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                  child: InkWell(
+                    onTap: () => _showAudioBarReciterPicker(s, p),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: p.bg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.record_voice_over,
+                              color: p.accent, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${s.selectedReciter.nameAr} • ${s.selectedReciter.nameEn}',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: p.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Icon(Icons.arrow_drop_down, color: p.accent),
+                        ],
+                      ),
                     ),
                   ),
                 ),
+                const SizedBox(width: 6),
                 IconButton(
                   tooltip: s.tr('Hide Audio Player', 'إخفاء المشغل'),
                   icon: Icon(
