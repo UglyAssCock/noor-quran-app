@@ -1,878 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:just_audio/just_audio.dart';
 import '../services/app_state.dart';
 import 'quran_reader_screen.dart';
 import 'prayer_qibla_screen.dart';
 
-/// PART 1: Interactive Hifz (Memorization) & Khatmah Planner Screen
-class HifzAndKhatmaScreen extends StatefulWidget {
-  final AppState appState;
-  const HifzAndKhatmaScreen({super.key, required this.appState});
-
-  @override
-  State<HifzAndKhatmaScreen> createState() => _HifzAndKhatmaScreenState();
-}
-
-class _HifzAndKhatmaScreenState extends State<HifzAndKhatmaScreen> {
-  final AudioPlayer _hifzAudioPlayer = AudioPlayer();
-  int _selectedSurah = 114;
-  int _hideMode = 1; // 0 = Show All, 1 = Hide Full Verse, 2 = Show First Word Only
-  final Set<String> _temporarilyRevealed = {};
-  String? _playingAyahKey;
-  int _repeatTarget = 3;
-  int _currentRepeatCount = 0;
-  AyahItem? _activeHifzAyah;
-
-  final List<Map<String, dynamic>> _khatmaPlans = const [
-    {'titleEn': '15 Days Intensive Khatmah', 'titleAr': 'ختمة مكثفة (١٥ يوماً)', 'goal': 40},
-    {'titleEn': '30 Days Khatmah Plan', 'titleAr': 'ختمة شهرية (٣٠ يوماً)', 'goal': 20},
-    {'titleEn': '60 Days Khatmah Plan', 'titleAr': 'ختمة في شهرين (٦٠ يوماً)', 'goal': 10},
-    {'titleEn': '120 Days Easy Khatmah', 'titleAr': 'ختمة ميسرة (١٢٠ يوماً)', 'goal': 5},
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _hifzAudioPlayer.playerStateStream.listen((state) {
-      if (!mounted) return;
-      if (state.processingState == ProcessingState.completed) {
-        if (_activeHifzAyah != null && _currentRepeatCount + 1 < _repeatTarget) {
-          _currentRepeatCount++;
-          _playHifzAyah(_activeHifzAyah!, resetCounter: false);
-        } else {
-          setState(() {
-            _playingAyahKey = null;
-            _currentRepeatCount = 0;
-          });
-        }
-      }
-    });
-  }
-
-  Future<void> _playHifzAyah(AyahItem item, {bool resetCounter = true}) async {
-    final s = widget.appState;
-    if (resetCounter) {
-      _currentRepeatCount = 0;
-    }
-    setState(() {
-      _activeHifzAyah = item;
-      _playingAyahKey = item.key;
-    });
-    try {
-      await _hifzAudioPlayer.setSpeed(s.playbackSpeed);
-      await _hifzAudioPlayer.setUrl(
-        s.audioUrlForAyah(item.surahNumber, item.numberInSurah),
-      );
-      await _hifzAudioPlayer.play();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _playingAyahKey = null);
-    }
-  }
-
-  @override
-  void dispose() {
-    _hifzAudioPlayer.dispose();
-    super.dispose();
-  }
-
-  String _formatHifzVerseText(AyahItem item, bool isRevealed) {
-    if (_hideMode == 0 || isRevealed) {
-      return '${item.textUthmani} ﴿${widget.appState.toArabicDigits(item.numberInSurah)}﴾';
-    }
-    final words = item.textUthmani.split(' ');
-    if (_hideMode == 2 && words.isNotEmpty) {
-      return '${words.first} •••••• ﴿${widget.appState.toArabicDigits(item.numberInSurah)}﴾';
-    }
-    return '•••••••••••• ﴿${widget.appState.toArabicDigits(item.numberInSurah)}﴾';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.appState;
-    final p = s.palette;
-    final ayahs = s.surahMap[_selectedSurah] ?? [];
-    final memorizedInSurah =
-        ayahs.where((a) => s.memorizedAyahs.contains(a.key)).length;
-    final progressRatio = (s.khatmaCompletedPages / 604.0).clamp(0.0, 1.0);
-    final remainingPages = (604 - s.khatmaCompletedPages).clamp(0, 604);
-    final daysLeft = (remainingPages / s.khatmaDailyGoalPages).ceil();
-
-    return Container(
-      color: p.bg,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 1. Daily Streak & Consistency Banner
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: p.card,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: p.border, width: 1.3),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orangeAccent.withOpacity(0.18),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.local_fire_department_rounded,
-                    color: Colors.orangeAccent,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${s.streakDays} ${s.tr("Day Streak", "أيام متتالية")}  •  ${s.tr("Best", "الأفضل")}: ${s.bestStreak}',
-                        style: TextStyle(
-                          color: p.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${s.tr("Memorized Verses", "الآيات المحفوظة")}: ${s.memorizedAyahs.length} / 6236',
-                        style: TextStyle(color: p.accent, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // 2. Interactive Khatmah Planner Card
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: p.card,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: p.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.track_changes, color: p.accent),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        s.tr('Interactive Khatmah Tracker', 'متابعة الختمة والورد اليومي'),
-                        style: TextStyle(
-                          color: p.textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${(progressRatio * 100).toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: p.accent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: progressRatio,
-                    minHeight: 10,
-                    backgroundColor: p.bg,
-                    color: p.accent,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${s.khatmaCompletedPages} / 604 ${s.tr("Pages", "صفحة")}',
-                      style: TextStyle(
-                        color: p.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      remainingPages == 0
-                          ? s.tr('Khatmah Completed! 🎉', 'تمت الختمة بحمد الله! 🎉')
-                          : '$daysLeft ${s.tr("days remaining", "يوماً متبقياً")}',
-                      style: TextStyle(color: p.textSecondary, fontSize: 12.5),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Interactive Page Slider
-                Slider(
-                  activeColor: p.accent,
-                  inactiveColor: p.border,
-                  min: 0,
-                  max: 604,
-                  divisions: 604,
-                  value: s.khatmaCompletedPages.toDouble(),
-                  label: '${s.khatmaCompletedPages}',
-                  onChanged: (val) {
-                    setState(() {
-                      s.updateKhatmaProgress(
-                        val.round(),
-                        s.khatmaDailyGoalPages,
-                      );
-                    });
-                  },
-                ),
-
-                // Select Khatmah Plan Chips
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _khatmaPlans.map((plan) {
-                      final planGoal = plan['goal'] as int;
-                      final isSelected = s.khatmaDailyGoalPages == planGoal;
-                      final title = s.isRtlLanguage
-                          ? plan['titleAr'] as String
-                          : plan['titleEn'] as String;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          selected: isSelected,
-                          selectedColor: p.accent,
-                          backgroundColor: p.bg,
-                          label: Text(
-                            '$title ($planGoal ${s.tr("p/day", "ص/يوم")})',
-                            style: TextStyle(
-                              color: isSelected ? Colors.black87 : p.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onSelected: (_) {
-                            setState(() {
-                              s.updateKhatmaProgress(
-                                s.khatmaCompletedPages,
-                                planGoal,
-                                plan['titleEn'] as String,
-                              );
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Action Buttons: -1 Page | +Daily Goal | Open Current Khatmah Page
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: p.textPrimary,
-                        side: BorderSide(color: p.border),
-                      ),
-                      icon: const Icon(Icons.remove, size: 18),
-                      label: Text(s.tr('-1 Page', '-١ صفحة')),
-                      onPressed: () => setState(
-                        () => s.updateKhatmaProgress(
-                          s.khatmaCompletedPages - 1,
-                          s.khatmaDailyGoalPages,
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: p.accent,
-                        foregroundColor: Colors.black87,
-                      ),
-                      icon: const Icon(Icons.check_circle_outline, size: 18),
-                      label: Text(
-                        '+${s.khatmaDailyGoalPages} ${s.tr("Pages (Complete Wird)", "صفحة (إتمام الورد)")}',
-                      ),
-                      onPressed: () => setState(
-                        () => s.updateKhatmaProgress(
-                          s.khatmaCompletedPages + s.khatmaDailyGoalPages,
-                          s.khatmaDailyGoalPages,
-                        ),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: p.accent,
-                        side: BorderSide(color: p.accent),
-                      ),
-                      icon: const Icon(Icons.menu_book, size: 18),
-                      label: Text(
-                        '${s.tr("Read Page", "اقرأ صفحة")} ${(s.khatmaCompletedPages + 1).clamp(1, 604)}',
-                      ),
-                      onPressed: () {
-                        final targetPage =
-                            (s.khatmaCompletedPages + 1).clamp(1, 604);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ActiveMushafView(
-                              appState: s,
-                              initialPage: targetPage,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // 3. Interactive Hifz (Memorization) Trainer Card
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: p.card,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: p.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.psychology, color: p.accent),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        s.tr('Interactive Hifz Trainer', 'مدرب الحفظ والمراجعة التفاعلي'),
-                        style: TextStyle(
-                          color: p.textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: p.bg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: p.border),
-                      ),
-                      child: Text(
-                        '$memorizedInSurah / ${ayahs.length}',
-                        style: TextStyle(
-                          color: p.accent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Surah Dropdown Selector
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: p.bg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: p.border),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int>(
-                      dropdownColor: p.card,
-                      value: _selectedSurah,
-                      isExpanded: true,
-                      items: s.surahs.map((surah) {
-                        return DropdownMenuItem<int>(
-                          value: surah.number,
-                          child: Text(
-                            '${surah.number}. ${surah.nameEn} (${surah.nameAr}) — ${surah.ayahCount} ${s.tr("Verses", "آيات")}',
-                            style: TextStyle(color: p.textPrimary, fontSize: 14),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          _hifzAudioPlayer.stop();
-                          setState(() {
-                            _selectedSurah = val;
-                            _temporarilyRevealed.clear();
-                            _playingAyahKey = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Hiding Mode Pills & Audio Loop Counter
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildHideModeChip(0, s.tr('Show All', 'إظهار الكل'), p),
-                      const SizedBox(width: 6),
-                      _buildHideModeChip(1, s.tr('Hide Verse', 'إخفاء الآية'), p),
-                      const SizedBox(width: 6),
-                      _buildHideModeChip(
-                        2,
-                        s.tr('First Word Hint', 'إظهار أول كلمة'),
-                        p,
-                      ),
-                      const SizedBox(width: 10),
-                      ActionChip(
-                        backgroundColor: p.bg,
-                        side: BorderSide(color: p.accent),
-                        avatar: Icon(Icons.repeat, color: p.accent, size: 16),
-                        label: Text(
-                          '${s.tr("Loop", "تكرار")}: ${_repeatTarget}x',
-                          style: TextStyle(color: p.accent, fontSize: 12),
-                        ),
-                        onPressed: () {
-                          const options = [1, 3, 5, 10];
-                          final next = options[
-                              (options.indexOf(_repeatTarget) + 1) %
-                                  options.length];
-                          setState(() => _repeatTarget = next);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      s.tr(
-                        'Tap any verse to reveal/hide • Tap play to loop audio',
-                        'اضغط على الآية لإظهارها واختبار حفظك • اضغط تشغيل للتكرار',
-                      ),
-                      style: TextStyle(color: p.textSecondary, fontSize: 11.5),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          for (final a in ayahs) {
-                            s.memorizedAyahs.add(a.key);
-                          }
-                          s.toggleMemorized(ayahs.first.key);
-                          s.toggleMemorized(ayahs.first.key);
-                        });
-                      },
-                      child: Text(
-                        s.tr('Mark All', 'حفظ الكل'),
-                        style: TextStyle(color: p.accent, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-                Divider(color: p.border),
-
-                // Verses List for Selected Surah
-                ...ayahs.map((item) {
-                  final isMemorized = s.memorizedAyahs.contains(item.key);
-                  final isRevealed = _temporarilyRevealed.contains(item.key);
-                  final isPlayingThis = _playingAyahKey == item.key;
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: isPlayingThis
-                          ? p.accent.withOpacity(0.12)
-                          : p.bg.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isPlayingThis ? p.accent : p.border,
-                      ),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      leading: IconButton(
-                        tooltip: s.tr('Mark Memorized', 'تم الحفظ'),
-                        icon: Icon(
-                          isMemorized
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          color: isMemorized ? p.accent : p.textSecondary,
-                        ),
-                        onPressed: () =>
-                            setState(() => s.toggleMemorized(item.key)),
-                      ),
-                      title: Directionality(
-                        textDirection: TextDirection.rtl,
-                        child: Text(
-                          _formatHifzVerseText(item, isRevealed),
-                          style: TextStyle(
-                            color: p.textPrimary,
-                            fontFamily: 'AmiriQuran',
-                            fontSize: s.quranFontSize - 2,
-                            height: 1.85,
-                          ),
-                        ),
-                      ),
-                      subtitle: isPlayingThis
-                          ? Text(
-                              '${s.tr("Playing Loop", "جاري التكرار")} (${_currentRepeatCount + 1}/$_repeatTarget)',
-                              style: TextStyle(color: p.accent, fontSize: 11.5),
-                            )
-                          : null,
-                      trailing: IconButton(
-                        icon: Icon(
-                          isPlayingThis
-                              ? Icons.stop_circle_outlined
-                              : Icons.play_circle_outline,
-                          color: p.accent,
-                        ),
-                        onPressed: () {
-                          if (isPlayingThis) {
-                            _hifzAudioPlayer.stop();
-                            setState(() => _playingAyahKey = null);
-                          } else {
-                            _playHifzAyah(item);
-                          }
-                        },
-                      ),
-                      onTap: () {
-                        setState(() {
-                          if (_temporarilyRevealed.contains(item.key)) {
-                            _temporarilyRevealed.remove(item.key);
-                          } else {
-                            _temporarilyRevealed.add(item.key);
-                          }
-                        });
-                      },
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHideModeChip(int mode, String label, AppThemePalette p) {
-    final selected = _hideMode == mode;
-    return ChoiceChip(
-      selected: selected,
-      selectedColor: p.accent,
-      backgroundColor: p.bg,
-      label: Text(
-        label,
-        style: TextStyle(
-          color: selected ? Colors.black87 : p.textSecondary,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      onSelected: (_) {
-        setState(() {
-          _hideMode = mode;
-          _temporarilyRevealed.clear();
-        });
-      },
-    );
-  }
-}
-
-/// Bookmarks & Personal Reflections Screen
-class BookmarksAndNotesScreen extends StatefulWidget {
-  final AppState appState;
-  const BookmarksAndNotesScreen({super.key, required this.appState});
-
-  @override
-  State<BookmarksAndNotesScreen> createState() =>
-      _BookmarksAndNotesScreenState();
-}
-
-class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
-  bool _showVersesTab = true;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.appState;
-    final p = s.palette;
-
-    return Container(
-      color: p.bg,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: p.card,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: p.border),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _showVersesTab = true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _showVersesTab ? p.accent : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        s.tr('Verses & Notes', 'الآيات والملاحظات'),
-                        style: TextStyle(
-                          color:
-                              _showVersesTab ? Colors.black87 : p.textSecondary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _showVersesTab = false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: !_showVersesTab ? p.accent : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        s.tr('Surahs', 'السور المحفوظة'),
-                        style: TextStyle(
-                          color: !_showVersesTab
-                              ? Colors.black87
-                              : p.textSecondary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Expanded(
-            child: _showVersesTab
-                ? _buildBookmarkedVersesList(s, p)
-                : _buildBookmarkedSurahsList(s, p),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBookmarkedVersesList(AppState s, AppThemePalette p) {
-    final keys = <String>{...s.bookmarks, ...s.ayahNotes.keys}.toList();
-    if (keys.isEmpty) {
-      return Center(
-        child: Text(
-          s.tr('No bookmarked verses yet.', 'لا توجد آيات محفوظة بعد.'),
-          style: TextStyle(color: p.textSecondary),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: keys.length,
-      itemBuilder: (context, idx) {
-        final key = keys[idx];
-        final parts = key.split(':');
-        final sNum = int.tryParse(parts[0]) ?? 1;
-        final aNum = int.tryParse(parts[1]) ?? 1;
-        final surahAyahs = s.surahMap[sNum] ?? [];
-        final ayah = surahAyahs.firstWhere(
-          (a) => a.numberInSurah == aNum,
-          orElse: () => AyahItem(
-            surahNumber: sNum,
-            surahNameAr: 'سورة',
-            surahNameEn: 'Surah $sNum',
-            numberInSurah: aNum,
-            globalNumber: 1,
-            juz: 1,
-            page: 1,
-            textUthmani: 'آية $key',
-          ),
-        );
-        final note = s.ayahNotes[key];
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: p.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: p.border),
-          ),
-          child: InkWell(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ActiveMushafView(
-                    appState: s,
-                    initialPage: ayah.page,
-                    initialSurah: sNum,
-                    highlightAyah: aNum,
-                  ),
-                ),
-              );
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.bookmark, color: p.accent, size: 22),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${ayah.surahNameEn} • ${ayah.key}',
-                      style: TextStyle(
-                        color: p.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: p.textSecondary,
-                        size: 20,
-                      ),
-                      onPressed: () => setState(() => s.toggleBookmark(key)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: Text(
-                      ayah.textUthmani,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: p.textPrimary,
-                        fontFamily: 'AmiriQuran',
-                        fontSize: 20,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${s.tr("Page", "صفحة")} ${ayah.page} • ${s.tr("Juz", "الجزء")} ${ayah.juz}',
-                  style: TextStyle(color: p.textSecondary, fontSize: 12),
-                ),
-                if (note != null && note.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    '📝 $note',
-                    style: TextStyle(color: p.accent, fontSize: 12.5),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBookmarkedSurahsList(AppState s, AppThemePalette p) {
-    final list = s.bookmarkedSurahs.toList();
-    return ListView.builder(
-      itemCount: list.length,
-      itemBuilder: (context, idx) {
-        final sNum = list[idx];
-        final meta = s.surahs.firstWhere(
-          (m) => m.number == sNum,
-          orElse: () => SurahMeta(
-            number: sNum,
-            nameAr: 'سورة',
-            nameEn: 'Surah $sNum',
-            meaningEn: '',
-            revelationType: 'Meccan',
-            ayahCount: 7,
-          ),
-        );
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: p.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: p.border),
-          ),
-          child: ListTile(
-            leading: RubElHizbBadge(
-              label: '${meta.number}',
-              size: 40,
-              color: p.accent,
-            ),
-            title: Text(
-              '${meta.nameEn} • ${meta.nameAr}',
-              style: TextStyle(
-                color: p.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            subtitle: Text(
-              '${meta.ayahCount} ${s.tr("Verses", "آيات")} • ${s.tr("Page", "صفحة")} ${meta.startPage}',
-              style: TextStyle(color: p.textSecondary),
-            ),
-            trailing: IconButton(
-              icon: Icon(Icons.delete_outline, color: p.textSecondary),
-              onPressed: () => setState(() => s.toggleSurahBookmark(sNum)),
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ActiveMushafView(
-                    appState: s,
-                    initialPage: meta.startPage,
-                    initialSurah: sNum,
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-/// PART 2: Interactive Ad'iyah (أدعية), Azkar & Digital Tasbih Screen
+/// PART 3: Expanded Ad'iyah (أدعية), Azkar, Digital Tasbih & Settings Screen (Hifz & Khatmah Removed)
 typedef AdiyahScreen = AdiyahAndAzkarScreen;
 typedef DuasScreen = AdiyahAndAzkarScreen;
 typedef DuasAndAzkarScreen = AdiyahAndAzkarScreen;
+typedef SettingsScreen = AzkarAndSettingsScreen;
 
 class AdiyahAndAzkarScreen extends StatefulWidget {
   final AppState appState;
@@ -885,6 +21,7 @@ class AdiyahAndAzkarScreen extends StatefulWidget {
 class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
   String _selectedCategory = 'all';
 
+  // Expanded Ad'iyah & Azkar library with dozens of authentic Quranic and Prophetic supplications
   final List<Map<String, dynamic>> _duasList = const [
     {
       'id': 'q_rabbana_atina',
@@ -925,8 +62,7 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
       'titleEn': 'Dua for Beneficial Knowledge',
       'titleAr': 'دعاء طلب العلم النافع',
       'arabic': 'رَّبِّ زِدْنِي عِلْمًا',
-      'translation':
-          'My Lord, increase me in knowledge. (Ta-Ha 20:114)',
+      'translation': 'My Lord, increase me in knowledge. (Ta-Ha 20:114)',
       'target': 7,
     },
     {
@@ -949,6 +85,26 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
           'رَبَّنَا اغْفِرْ لِي وَلِوَالِدَيَّ وَلِلْمُؤْمِنِينَ يَوْمَ يَقُومُ الْحِسَابُ',
       'translation':
           'Our Lord, forgive me and my parents and the believers the Day the account is established. (Ibrahim 14:41)',
+      'target': 3,
+    },
+    {
+      'id': 'q_sabrun_jameel',
+      'cat': 'quranic',
+      'titleEn': 'Dua for Patience & Perseverance',
+      'titleAr': 'دعاء الصبر والثبات عند البلاء',
+      'arabic': 'رَبَّنَا أَفْرِغْ عَلَيْنَا صَبْرًا وَتَوَفَّنَا مُسْلِمِينَ',
+      'translation':
+          'Our Lord, pour upon us patience and let us die as Muslims [in submission to You]. (Al-A\'raf 7:126)',
+      'target': 3,
+    },
+    {
+      'id': 'q_rabbi_hab_li',
+      'cat': 'quranic',
+      'titleEn': 'Dua for Righteous Offspring',
+      'titleAr': 'دعاء صلاح الذرية والأسرة',
+      'arabic': 'رَبِّ هَبْ لِي مِن لَّدُنْكَ ذُرِّيَّةً طَيِّبَةً ۖ إِنَّكَ سَمِيعُ الدُّعَاءِ',
+      'translation':
+          'My Lord, grant me from Yourself a good offspring. Indeed, You are the Hearer of supplication. (Aal-e-Imran 3:38)',
       'target': 3,
     },
     {
@@ -980,6 +136,26 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
       'arabic': 'اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ فِي الدُّنْيَا وَالْآخِرَةِ',
       'translation':
           'O Allah, I ask You for pardon and well-being in this life and the next.',
+      'target': 3,
+    },
+    {
+      'id': 'p_rizq_halal',
+      'cat': 'prophetic',
+      'titleEn': 'Dua for Halal Sustenance & Knowledge',
+      'titleAr': 'دعاء الرزق الواسع والعلم النافع',
+      'arabic': 'اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا، وَرِزْقًا طَيِّبًا، وَعَمَلًا مُتَقَبَّلًا',
+      'translation':
+          'O Allah, I ask You for beneficial knowledge, good and lawful sustenance, and accepted deeds.',
+      'target': 1,
+    },
+    {
+      'id': 'p_shifa',
+      'cat': 'prophetic',
+      'titleEn': 'Dua for Healing from Illness',
+      'titleAr': 'دعاء الشفاء العاجل',
+      'arabic': 'اللَّهُمَّ رَبَّ النَّاسِ، أَذْهِبِ الْبَاسَ، اشْفِ أَنْتَ الشَّافِي لاَ شِفَاءَ إِلاَّ شِفَاؤُكَ، شِفَاءً لاَ يُغَادِرُ سَقَمًا',
+      'translation':
+          'O Allah, Lord of mankind, remove the adversity and heal, for You are the Healer. There is no healing except Your healing, a healing that leaves no illness behind.',
       'target': 3,
     },
     {
@@ -1022,7 +198,7 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
       'arabic':
           'اللَّهُمَّ ارْحَمْنِي بِالْقُرْآنِ وَاجْعَلْهُ لِي إِمَامًا وَنُورًا وَهُدًى وَرَحْمَةً، اللَّهُمَّ ذَكِّرْنِي مِنْهُ مَا نُسِّيتُ وَعَلِّمْنِي مِنْهُ مَا جَهِلْتُ وَارْزُقْنِي تِلَاوَتَهُ آنَاءَ اللَّيْلِ وَأَطْرَافَ النَّهَارِ وَاجْعَلْهُ لِي حُجَّةً يَا رَبَّ الْعَالَمِينَ',
       'translation':
-          'O Allah, have mercy on me through the Qur’an, and make it for me a leader, a light, a guidance, and a mercy. O Allah, remind me of what I have forgotten from it, teach me of what I am ignorant of from it, and grant me its recitation throughout the night and day.',
+          'O Allah, have mercy on me through the Qur’an, and make it for me a leader, a light, a guidance, and a mercy...',
       'target': 1,
     },
   ];
@@ -1042,7 +218,6 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 1. Interactive Digital Tasbih Counter Card
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -1057,7 +232,7 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.spa_outlined. codePoint != 0 ? Icons.spa_outlined : Icons.circle, color: p.accent),
+                        Icon(Icons.spa_outlined, color: p.accent),
                         const SizedBox(width: 8),
                         Text(
                           s.tr('Digital Tasbih Counter', 'المسبحة الإلكترونية'),
@@ -1119,8 +294,6 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // 2. Category Filter Pills
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -1131,15 +304,13 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
                 const SizedBox(width: 8),
                 _buildCatPill('prophetic', s.tr('Prophetic Duas', 'أدعية نبوية'), p),
                 const SizedBox(width: 8),
-                _buildCatPill('azkar', s.tr('Morning & Evening', 'أذكار الصباح والمساء'), p),
+                _buildCatPill('azkar', s.tr('Morning & Evening', 'الأذكار'), p),
                 const SizedBox(width: 8),
-                _buildCatPill('khatm', s.tr('Khatm Al-Quran', 'دعاء ختم القرآن'), p),
+                _buildCatPill('khatm', s.tr('Khatm Al-Quran', 'ختم القرآن'), p),
               ],
             ),
           ),
           const SizedBox(height: 14),
-
-          // 3. Interactive Duas & Azkar Cards
           ...filteredDuas.map((dua) {
             final id = dua['id'] as String;
             final target = dua['target'] as int;
@@ -1293,8 +464,274 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
     );
   }
 }
-/// PART 3: Multi-Language Settings, 6 Themes, Hafs/Warsh, 36+ Languages & 184+ Tafsir Screen
-typedef SettingsScreen = AzkarAndSettingsScreen;
+
+class BookmarksAndNotesScreen extends StatefulWidget {
+  final AppState appState;
+  const BookmarksAndNotesScreen({super.key, required this.appState});
+
+  @override
+  State<BookmarksAndNotesScreen> createState() =>
+      _BookmarksAndNotesScreenState();
+}
+
+class _BookmarksAndNotesScreenState extends State<BookmarksAndNotesScreen> {
+  bool _showVersesTab = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.appState;
+    final p = s.palette;
+
+    return Container(
+      color: p.bg,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: p.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showVersesTab = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _showVersesTab ? p.accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        s.tr('Verses & Notes', 'الآيات والملاحظات'),
+                        style: TextStyle(
+                          color:
+                              _showVersesTab ? Colors.black87 : p.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showVersesTab = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: !_showVersesTab ? p.accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        s.tr('Surahs', 'السور المحفوظة'),
+                        style: TextStyle(
+                          color: !_showVersesTab
+                              ? Colors.black87
+                              : p.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: _showVersesTab
+                ? _buildBookmarkedVersesList(s, p)
+                : _buildBookmarkedSurahsList(s, p),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookmarkedVersesList(AppState s, AppThemePalette p) {
+    final keys = <String>{...s.bookmarks, ...s.ayahNotes.keys}.toList();
+    if (keys.isEmpty) {
+      return Center(
+        child: Text(
+          s.tr('No bookmarked verses yet.', 'لا توجد آيات محفوظة بعد.'),
+          style: TextStyle(color: p.textSecondary),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: keys.length,
+      itemBuilder: (context, idx) {
+        final key = keys[idx];
+        final parts = key.split(':');
+        final sNum = int.tryParse(parts[0]) ?? 1;
+        final aNum = int.tryParse(parts[1]) ?? 1;
+        final surahAyahs = s.surahMap[sNum] ?? [];
+        final ayah = surahAyahs.firstWhere(
+          (a) => a.numberInSurah == aNum,
+          orElse: () => AyahItem(
+            surahNumber: sNum,
+            surahNameAr: 'سورة',
+            surahNameEn: 'Surah $sNum',
+            numberInSurah: aNum,
+            globalNumber: 1,
+            juz: 1,
+            page: 1,
+            textUthmani: 'آية $key',
+          ),
+        );
+        final note = s.ayahNotes[key];
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.border),
+          ),
+          child: InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ActiveMushafView(
+                    appState: s,
+                    initialPage: ayah.page,
+                    initialSurah: sNum,
+                    highlightAyah: aNum,
+                  ),
+                ),
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.bookmark, color: p.accent, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${ayah.surahNameAr} • ${ayah.key}',
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: p.textSecondary,
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => s.toggleBookmark(key)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Text(
+                      ayah.textUthmani,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontFamily: 'AmiriQuran',
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${s.tr("Page", "صفحة")} ${ayah.page} • ${s.tr("Juz", "الجزء")} ${ayah.juz}',
+                  style: TextStyle(color: p.textSecondary, fontSize: 12),
+                ),
+                if (note != null && note.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '📝 $note',
+                    style: TextStyle(color: p.accent, fontSize: 12.5),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBookmarkedSurahsList(AppState s, AppThemePalette p) {
+    final list = s.bookmarkedSurahs.toList();
+    return ListView.builder(
+      itemCount: list.length,
+      itemBuilder: (context, idx) {
+        final sNum = list[idx];
+        final meta = s.surahs.firstWhere(
+          (m) => m.number == sNum,
+          orElse: () => SurahMeta(
+            number: sNum,
+            nameAr: 'سورة',
+            nameEn: 'Surah $sNum',
+            meaningEn: '',
+            revelationType: 'Meccan',
+            ayahCount: 7,
+          ),
+        );
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.border),
+          ),
+          child: ListTile(
+            leading: RubElHizbBadge(
+              label: '${meta.number}',
+              size: 40,
+              color: p.accent,
+            ),
+            title: Text(
+              '${meta.nameAr} • ${meta.nameEn}',
+              style: TextStyle(
+                color: p.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              '${meta.ayahCount} ${s.tr("Verses", "آيات")} • ${s.tr("Page", "صفحة")} ${meta.startPage}',
+              style: TextStyle(color: p.textSecondary),
+            ),
+            trailing: IconButton(
+              icon: Icon(Icons.delete_outline, color: p.textSecondary),
+              onPressed: () => setState(() => s.toggleSurahBookmark(sNum)),
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ActiveMushafView(
+                    appState: s,
+                    initialPage: meta.startPage,
+                    initialSurah: sNum,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
 
 class AzkarAndSettingsScreen extends StatefulWidget {
   final AppState appState;
@@ -1310,6 +747,9 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
       context: context,
       backgroundColor: p.bg,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.72,
@@ -1323,7 +763,7 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
                   '${s.tr("Reciter", "اختر القارئ")} (${s.reciters.length})',
                   style: TextStyle(
                     color: p.textPrimary,
-                    fontSize: 17,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1431,6 +871,9 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
       context: context,
       backgroundColor: p.bg,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.75,
@@ -1514,6 +957,9 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
       context: context,
       backgroundColor: p.bg,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.75,
@@ -1657,7 +1103,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 1. Theme Colors Picker (6 Themes)
           Text(
             s.tr('Theme Colors', 'ألوان ومظهر التطبيق'),
             style: TextStyle(
@@ -1715,8 +1160,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // 2. Audio Settings Group
           Text(
             s.tr('Audio Settings (65 Reciters)', 'إعدادات الصوت والقراء'),
             style: TextStyle(
@@ -1759,8 +1202,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // 3. Reading, Mushaf & Global Language Settings
           Text(
             s.tr('Reading & Mushaf Settings', 'إعدادات المصحف واللغات والتفسير'),
             style: TextStyle(
@@ -1869,8 +1310,6 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // 4. Quick Navigation Buttons to Prayer & Qibla and Ad'iyah
           Row(
             children: [
               Expanded(
@@ -1926,22 +1365,5 @@ class _AzkarAndSettingsScreenState extends State<AzkarAndSettingsScreen> {
         ],
       ),
     );
-  }
-}
-
-/// Fallback alias in case any file references HomeDashboardScreen
-class HomeDashboardScreen extends StatelessWidget {
-  final AppState appState;
-  final ValueChanged<int>? onNavigateTab;
-
-  const HomeDashboardScreen({
-    super.key,
-    required this.appState,
-    this.onNavigateTab,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return QuranReaderScreen(appState: appState);
   }
 }
