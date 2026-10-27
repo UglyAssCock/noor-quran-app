@@ -1057,7 +1057,7 @@ class _AdiyahAndAzkarScreenState extends State<AdiyahAndAzkarScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.SPA_outlined. codePoint != 0 ? Icons.spa_outlined : Icons.circle, color: p.accent),
+                        Icon(Icons.spa_outlined. codePoint != 0 ? Icons.spa_outlined : Icons.circle, color: p.accent),
                         const SizedBox(width: 8),
                         Text(
                           s.tr('Digital Tasbih Counter', 'المسبحة الإلكترونية'),
