@@ -209,7 +209,6 @@ class AppState extends ChangeNotifier {
   String selectedReadingPlan = '30 Days Khatmah Plan';
   int tasbihCount = 0;
 
-  // Daily Streak State
   int streakDays = 1;
   int bestStreak = 1;
   int todayPagesRead = 1;
@@ -456,6 +455,33 @@ class AppState extends ChangeNotifier {
     fullSurahBaseUrl: 'https://server8.mp3quran.net/afs',
   );
 
+  // Clean standard Arabic names for all 114 Surahs (prevents broken Uthmani Alef-Wasla rendering)
+  static const List<String> _cleanArabicSurahNames = [
+    'سورة الفاتحة', 'سورة البقرة', 'سورة آل عمران', 'سورة النساء', 'سورة المائدة',
+    'سورة الأنعام', 'سورة الأعراف', 'سورة الأنفال', 'سورة التوبة', 'سورة يونس',
+    'سورة هود', 'سورة يوسف', 'سورة الرعد', 'سورة إبراهيم', 'سورة الحجر',
+    'سورة النحل', 'سورة الإسراء', 'سورة الكهف', 'سورة مريم', 'سورة طه',
+    'سورة الأنبياء', 'سورة الحج', 'سورة المؤمنون', 'سورة النور', 'سورة الفرقان',
+    'سورة الشعراء', 'سورة النمل', 'سورة القصص', 'سورة العنكبوت', 'سورة الروم',
+    'سورة لقمان', 'سورة السجدة', 'سورة الأحزاب', 'سورة سبأ', 'سورة فاطر',
+    'سورة يس', 'سورة الصافات', 'سورة ص', 'سورة الزمر', 'سورة غافر',
+    'سورة فصلت', 'سورة الشورى', 'سورة الزخرف', 'سورة الدخان', 'سورة الجاثية',
+    'سورة الأحقاف', 'سورة محمد', 'سورة الفتح', 'سورة الحجرات', 'سورة ق',
+    'سورة الذاريات', 'سورة الطور', 'سورة النجم', 'سورة القمر', 'سورة الرحمن',
+    'سورة الواقعة', 'سورة الحديد', 'سورة المجادلة', 'سورة الحشر', 'سورة الممتحنة',
+    'سورة الصف', 'سورة الجمعة', 'سورة المنافقون', 'سورة التغابن', 'سورة الطلاق',
+    'سورة التحريم', 'سورة الملك', 'سورة القلم', 'سورة الحاقة', 'سورة المعارج',
+    'سورة نوح', 'سورة الجن', 'سورة المزمل', 'سورة المدثر', 'سورة القيامة',
+    'سورة الإنسان', 'سورة المرسلات', 'سورة النبأ', 'سورة النازعات', 'سورة عبس',
+    'سورة التكوير', 'سورة الانفطار', 'سورة المطففين', 'سورة الانشقاق', 'سورة البروج',
+    'سورة الطارق', 'سورة الأعلى', 'سورة الغاشية', 'سورة الفجر', 'سورة البلد',
+    'سورة الشمس', 'سورة الليل', 'سورة الضحى', 'سورة الشرح', 'سورة التين',
+    'سورة العلق', 'سورة القدر', 'سورة البينة', 'سورة الزلزلة', 'سورة العاديات',
+    'سورة القارعة', 'سورة التكاثر', 'سورة العصر', 'سورة الهمزة', 'سورة الفيل',
+    'سورة قريش', 'سورة الماعون', 'سورة الكوثر', 'سورة الكافرون', 'سورة النصر',
+    'سورة المسد', 'سورة الإخلاص', 'سورة الفلق', 'سورة الناس',
+  ];
+
   Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
     selectedThemeId = _prefs.getString('selectedThemeId') ?? 'emerald_night';
@@ -491,7 +517,6 @@ class AppState extends ChangeNotifier {
         _prefs.getString('selectedReadingPlan') ?? '30 Days Khatmah Plan';
     tasbihCount = _prefs.getInt('tasbihCount') ?? 0;
 
-    // Load & Verify Daily Streak
     streakDays = _prefs.getInt('streakDays') ?? 1;
     bestStreak = _prefs.getInt('bestStreak') ?? 1;
     todayPagesRead = _prefs.getInt('todayPagesRead') ?? 1;
@@ -544,7 +569,6 @@ class AppState extends ChangeNotifier {
       todayPagesRead = 1;
       lastStreakDate = todayKey;
     } else {
-      // Missed more than 1 day -> reset streak to 1
       streakDays = 1;
       todayPagesRead = 1;
       lastStreakDate = todayKey;
@@ -561,7 +585,6 @@ class AppState extends ChangeNotifier {
     return activeDatesHistory.contains(_dateKey(dt));
   }
 
-  /// Saves PNG bytes directly to the Android Gallery (Pictures/NoorQuran album)
   Future<String> savePngToGallery(Uint8List pngBytes, String fileName) async {
     try {
       final res = await _galleryChannel.invokeMethod<String>(
@@ -571,7 +594,6 @@ class AppState extends ChangeNotifier {
       if (res != null && res.isNotEmpty) return res;
     } catch (_) {}
 
-    // Fallback to public Pictures/Download directory
     final fallbackDirs = [
       '/storage/emulated/0/Pictures',
       '/storage/emulated/0/Download',
@@ -712,15 +734,19 @@ class AppState extends ChangeNotifier {
     return res.isEmpty ? 'Quranic Word' : res;
   }
 
-  String getTafsirForAyah(AyahItem item) {
-    if (activeQuickTafsirTab == 'ibn_kathir') {
-      return 'Tafsir Ibn Kathir (${item.key}):\n${item.translationEn}\n\nتفسير ابن كثير والميسر:\n${item.tafsirAr}';
-    } else if (activeQuickTafsirTab == 'qurtubi') {
-      return 'Al-Jami\' li-Ahkam al-Qur\'an — Imam Al-Qurtubi (${item.key}):\nأحكام الآية ومعانيها اللغوية والشرعية: ${item.tafsirAr}\n\nMeaning & Legal Rulings: ${item.translationEn}';
-    } else if (activeQuickTafsirTab == 'jalalayn') {
-      return 'Tafsir Al-Jalalayn (${item.key}):\n${item.tafsirAr}\n\nConcise Exegesis: ${item.translationEn}';
+  /// Returns ONLY ONE Tafsir / Explanation so it never duplicates on screen or in saved images
+  String getSingleTafsirForAyah(AyahItem item) {
+    if (selectedLanguageCode == 'ar' || isArabicUi) {
+      return item.tafsirAr;
     }
-    return '${item.tafsirAr}\n\n${item.translationEn}';
+    if (selectedLanguageCode == 'fr' && item.translationFr.isNotEmpty) {
+      return item.translationFr;
+    }
+    return item.translationEn;
+  }
+
+  String getTafsirForAyah(AyahItem item) {
+    return getSingleTafsirForAyah(item);
   }
 
   Future<void> _initOfflineStorageDir() async {
@@ -887,7 +913,10 @@ class AppState extends ChangeNotifier {
       for (int s = 0; s < surahList.length; s++) {
         final sObj = surahList[s];
         final sNum = sObj['number'] as int;
-        final sNameAr = sObj['name'] as String;
+        // Use clean standard Arabic Surah name so no letters break in UI lists
+        final sNameAr = (sNum >= 1 && sNum <= _cleanArabicSurahNames.length)
+            ? _cleanArabicSurahNames[sNum - 1]
+            : (sObj['name'] as String).replaceAll('\u0671', 'ا');
         final sNameEn = sObj['englishName'] as String;
         final sMeaning = sObj['englishNameTranslation'] as String;
         final sRev = sObj['revelationType'] as String;
@@ -956,6 +985,9 @@ class AppState extends ChangeNotifier {
     _prefs.setBool('isArabicUi', isArabicUi);
     notifyListeners();
 
+    if (lang.code == 'ar') {
+      return;
+    }
     if (lang.code == 'fr') {
       for (final item in allAyahs) {
         if (item.translationFr.isNotEmpty) {
@@ -1140,7 +1172,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateKhatmaProgress(int pagesCompleted, int dailyGoal, [String? planName]) {
+  void updateKhatmaProgress(
+      int pagesCompleted, int dailyGoal, [String? planName]) {
     khatmaCompletedPages = pagesCompleted.clamp(0, 604);
     khatmaDailyGoalPages = dailyGoal.clamp(1, 60);
     if (planName != null) {
@@ -1165,12 +1198,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Multi-Language Interface Dictionary for 36+ Global Languages
   static const Map<String, Map<String, String>> _multiLangUi = {
     'fr': {
       'Quran': 'Coran',
       'Read · Listen · Reflect': 'Lire · Écouter · Méditer',
-      'Hifz & Khatmah': 'Hifz & Khatma',
       'Ad\'iyah': 'Invocations',
       'Duas & Azkar': 'Douas & Azkar',
       'Bookmarks': 'Favoris',
@@ -1198,7 +1229,6 @@ class AppState extends ChangeNotifier {
     'es': {
       'Quran': 'Corán',
       'Read · Listen · Reflect': 'Leer · Escuchar · Reflexionar',
-      'Hifz & Khatmah': 'Hifz y Jatmah',
       'Ad\'iyah': 'Súplicas (Duas)',
       'Duas & Azkar': 'Duas y Azkar',
       'Bookmarks': 'Marcadores',
@@ -1220,7 +1250,6 @@ class AppState extends ChangeNotifier {
     'tr': {
       'Quran': 'Kur\'an-ı Kerim',
       'Read · Listen · Reflect': 'Oku · Dinle · Tefekkür Et',
-      'Hifz & Khatmah': 'Hıfz ve Hatim',
       'Ad\'iyah': 'Dualar ve Zikirler',
       'Duas & Azkar': 'Dualar ve Zikirler',
       'Bookmarks': 'Kaydedilenler',
@@ -1242,7 +1271,6 @@ class AppState extends ChangeNotifier {
     'id': {
       'Quran': 'Al-Qur\'an',
       'Read · Listen · Reflect': 'Baca · Dengar · Renungkan',
-      'Hifz & Khatmah': 'Hafalan & Khatam',
       'Ad\'iyah': 'Doa & Dzikir',
       'Duas & Azkar': 'Doa & Dzikir',
       'Bookmarks': 'Penanda',
@@ -1262,7 +1290,6 @@ class AppState extends ChangeNotifier {
     'ur': {
       'Quran': 'قرآن مجید',
       'Read · Listen · Reflect': 'پڑھیں · سنیں · تدبر کریں',
-      'Hifz & Khatmah': 'حفظ اور ختم قرآن',
       'Ad\'iyah': 'مسنون دعائیں',
       'Duas & Azkar': 'دعائیں اور اذکار',
       'Bookmarks': 'محفوظ آیات',
@@ -1280,7 +1307,6 @@ class AppState extends ChangeNotifier {
     'de': {
       'Quran': 'Koran',
       'Read · Listen · Reflect': 'Lesen · Hören · Nachdenken',
-      'Hifz & Khatmah': 'Hifz & Chatma',
       'Ad\'iyah': 'Bittgebete (Duas)',
       'Bookmarks': 'Lesezeichen',
       'Settings': 'Einstellungen',
@@ -1296,7 +1322,6 @@ class AppState extends ChangeNotifier {
     'ru': {
       'Quran': 'Коран',
       'Read · Listen · Reflect': 'Читай · Слушай · Размышляй',
-      'Hifz & Khatmah': 'Хифз и Хатм',
       'Ad\'iyah': 'Дуа и Азкары',
       'Bookmarks': 'Закладки',
       'Settings': 'Настройки',
