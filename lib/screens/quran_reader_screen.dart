@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -181,31 +180,7 @@ class _MosqueArchPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Saves the rendered Verse + Tafsir PNG image directly to the phone's public Download folder
-Future<String?> _savePngBytesToPhoneDownloads(
-  Uint8List pngBytes,
-  String fileName,
-) async {
-  final candidateDirs = <String>[
-    '/storage/emulated/0/Download',
-    '/sdcard/Download',
-    '/storage/emulated/0/Pictures',
-    Directory.systemTemp.path,
-  ];
-
-  for (final dirPath in candidateDirs) {
-    try {
-      final dir = Directory(dirPath);
-      if (await dir.exists()) {
-        final file = File('${dir.path}/$fileName');
-        await file.writeAsBytes(pngBytes, flush: true);
-        return file.path;
-      }
-    } catch (_) {}
-  }
-  return null;
-}
-
+/// Captures the Verse + Tafsir card and saves it directly into the Android Gallery
 Future<void> showShareVerseAsImageSheet(
   BuildContext context,
   AppState appState,
@@ -229,8 +204,8 @@ Future<void> showShareVerseAsImageSheet(
           children: [
             Text(
               appState.tr(
-                'Share Verse & Tafsir as Image',
-                'حفظ ومشاركة الآية والتفسير كصورة',
+                'Save to Gallery',
+                'حفظ بطاقة الآية والتفسير في المعرض',
               ),
               style: TextStyle(
                 color: p.textPrimary,
@@ -352,8 +327,8 @@ Future<void> showShareVerseAsImageSheet(
                         SnackBar(
                           content: Text(
                             appState.tr(
-                              'Copied Verse & Tafsir to clipboard!',
-                              'تم نسخ الآية والتفسير إلى الحافظة!',
+                              'Copied Verse & Tafsir!',
+                              'تم نسخ الآية والتفسير!',
                             ),
                           ),
                         ),
@@ -368,9 +343,9 @@ Future<void> showShareVerseAsImageSheet(
                       backgroundColor: p.accent,
                       foregroundColor: Colors.black87,
                     ),
-                    icon: const Icon(Icons.download_rounded),
+                    icon: const Icon(Icons.photo_library_outlined),
                     label: Text(
-                      appState.tr('Save PNG Image', 'حفظ الصورة في الهاتف'),
+                      appState.tr('Save to Gallery', 'حفظ في المعرض'),
                     ),
                     onPressed: () async {
                       try {
@@ -386,23 +361,32 @@ Future<void> showShareVerseAsImageSheet(
                         if (byteData != null) {
                           final pngBytes = byteData.buffer.asUint8List();
                           final fileName =
-                              'NoorQuran_${ayah.surahNumber}_${ayah.numberInSurah}.png';
-                          final savedPath = await _savePngBytesToPhoneDownloads(
-                            pngBytes,
-                            fileName,
-                          );
+                              'NoorQuran_${ayah.surahNumber}_${ayah.numberInSurah}_${DateTime.now().millisecondsSinceEpoch}.png';
+                          final savedLocation =
+                              await appState.savePngToGallery(pngBytes, fileName);
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (context.mounted) {
                             showDialog(
                               context: context,
                               builder: (dCtx) => AlertDialog(
                                 backgroundColor: p.card,
-                                title: Text(
-                                  appState.tr(
-                                    'Image Saved Successfully!',
-                                    'تم حفظ الصورة بنجاح!',
-                                  ),
-                                  style: TextStyle(color: p.accent),
+                                title: Row(
+                                  children: [
+                                    Icon(Icons.check_circle, color: p.accent),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        appState.tr(
+                                          'Saved to Gallery!',
+                                          'تم الحفظ في معرض الصور!',
+                                        ),
+                                        style: TextStyle(
+                                          color: p.accent,
+                                          fontSize: 17,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 content: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -411,15 +395,13 @@ Future<void> showShareVerseAsImageSheet(
                                       borderRadius: BorderRadius.circular(12),
                                       child: Image.memory(
                                         pngBytes,
-                                        height: 180,
+                                        height: 170,
                                         fit: BoxFit.contain,
                                       ),
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
-                                      savedPath != null
-                                          ? 'Saved to:\n$savedPath'
-                                          : 'Saved ($fileName)',
+                                      savedLocation,
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: p.textSecondary,
@@ -496,6 +478,198 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     );
   }
 
+  void _showDailyStreakModal(AppState s, AppThemePalette p) {
+    final now = DateTime.now();
+    final last7Days = List.generate(
+      7,
+      (i) => now.subtract(Duration(days: 6 - i)),
+    );
+    const weekdayLabelsEn = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const weekdayLabelsAr = ['إ', 'ث', 'أ', 'خ', 'ج', 'س', 'ح'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: p.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.local_fire_department_rounded,
+                    color: Colors.orangeAccent,
+                    size: 34,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${s.streakDays} ${s.tr("Day Streak", "أيام متتالية في قراءة القرآن")}',
+                          style: TextStyle(
+                            color: p.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          s.tr(
+                            'Read at least 1 page every day to keep your streak alive!',
+                            'اقرأ صفحة واحدة على الأقل يومياً للحفاظ على سلسلتك المستمرة!',
+                          ),
+                          style: TextStyle(color: p.textSecondary, fontSize: 12.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              // 7-Day Consistency Calendar Row
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+                decoration: BoxDecoration(
+                  color: p.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: p.border),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: last7Days.map((dt) {
+                    final active = s.isDateActiveInStreak(dt);
+                    final wIdx = (dt.weekday - 1).clamp(0, 6);
+                    final label = s.isRtlLanguage
+                        ? weekdayLabelsAr[wIdx]
+                        : weekdayLabelsEn[wIdx];
+                    return Column(
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: p.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: active
+                              ? Colors.orangeAccent
+                              : p.bg,
+                          child: Icon(
+                            active
+                                ? Icons.local_fire_department_rounded
+                                : Icons.circle_outlined,
+                            size: 18,
+                            color: active ? Colors.black87 : p.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${dt.day}',
+                          style: TextStyle(
+                            color: p.textPrimary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: p.card,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${s.bestStreak}',
+                            style: TextStyle(
+                              color: p.accent,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            s.tr('Best Streak', 'أطول سلسلة'),
+                            style: TextStyle(color: p.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: p.card,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${s.todayPagesRead}',
+                            style: TextStyle(
+                              color: p.accent,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            s.tr('Pages Today', 'صفحات اليوم'),
+                            style: TextStyle(color: p.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: p.accent,
+                    foregroundColor: Colors.black87,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                  icon: const Icon(Icons.menu_book_rounded),
+                  label: Text(
+                    '${s.tr("Resume", "متابعة القراءة")} (${s.tr("Page", "صفحة")} ${s.lastPage})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _openReader(pageNum: s.lastPage, surahNum: s.lastSurah);
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _handleSurahDownload(SurahMeta surah) async {
     final s = widget.appState;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -534,8 +708,108 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       color: p.bg,
       child: Column(
         children: [
+          // Top Daily Streak & Continue Reading Bar
+          GestureDetector(
+            onTap: () => _showDailyStreakModal(s, p),
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: p.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: p.border, width: 1.3),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orangeAccent.withOpacity(0.16),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.local_fire_department_rounded,
+                      color: Colors.orangeAccent,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '${s.streakDays} ${s.tr("Day Streak", "أيام متتالية")}',
+                              style: TextStyle(
+                                color: p.textPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14.5,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: p.accent.withOpacity(0.18),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${s.todayPagesRead} ${s.tr("Pages Today", "صفحات اليوم")}',
+                                style: TextStyle(
+                                  color: p.accent,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${s.tr("Page", "صفحة")} ${s.lastPage} • ${s.tr("Surah", "سورة")} ${s.lastSurah}:${s.lastAyah}',
+                          style: TextStyle(
+                            color: p.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: p.accent,
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                    ),
+                    onPressed: () => _openReader(
+                      pageNum: s.lastPage,
+                      surahNum: s.lastSurah,
+                      startAyah: s.lastAyah,
+                    ),
+                    child: Text(
+                      s.tr('Resume', 'متابعة'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Smart Search Bar
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
             child: TextField(
               controller: _searchController,
               style: TextStyle(color: p.textPrimary),
@@ -558,6 +832,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                     : null,
                 filled: true,
                 fillColor: p.card,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide(color: p.border),
@@ -569,6 +844,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
               ),
             ),
           ),
+
+          // Filter Pills
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -710,7 +987,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                '${item.surahNameEn} (${item.key}) • Page ${item.page}',
+                '${item.surahNameEn} (${item.key}) • ${s.tr("Page", "صفحة")} ${item.page}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: p.textSecondary, fontSize: 12.5),
@@ -886,7 +1163,6 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   }
 }
 
-/// Real 604-Page Printed Mushaf Reader (with hidden audio dock by default)
 class ActiveMushafView extends StatefulWidget {
   final AppState appState;
   final int? initialSurah;
@@ -913,8 +1189,8 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   late PageController _mushafPageController;
 
-  bool _isBookMushafPageMode = true; // Default: Real 604-page printed Mushaf
-  bool _showAudioPlayer = false; // Hidden by default as requested
+  bool _isBookMushafPageMode = true;
+  bool _showAudioPlayer = false;
   bool _repeatCurrentAyah = false;
   bool _continuousPlay = true;
   bool _isPlaying = false;
@@ -1098,7 +1374,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            '${ayah.surahNameEn} (${ayah.key}) • Page ${ayah.page}',
+                            '${ayah.surahNameEn} (${ayah.key}) • ${s.tr("Page", "صفحة")} ${ayah.page}',
                             style: TextStyle(
                               color: p.textPrimary,
                               fontWeight: FontWeight.bold,
@@ -1130,8 +1406,9 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                           },
                         ),
                         IconButton(
-                          tooltip: s.tr('Save/Share Image', 'حفظ كصورة'),
-                          icon: Icon(Icons.image_outlined, color: p.accent),
+                          tooltip: s.tr('Save to Gallery', 'حفظ في المعرض'),
+                          icon: Icon(Icons.photo_library_outlined,
+                              color: p.accent),
                           onPressed: () {
                             Navigator.pop(ctx);
                             showShareVerseAsImageSheet(context, s, ayah);
@@ -1253,7 +1530,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
           ],
         ),
         actions: [
-          // Toggle Audio Player Bar (Hidden by default)
           IconButton(
             tooltip: s.tr('Show/Hide Audio Player', 'إظهار/إخفاء المشغل الصوتي'),
             icon: Icon(
@@ -1291,7 +1567,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
             child: _isBookMushafPageMode
                 ? PageView.builder(
                     controller: _mushafPageController,
-                    reverse: true, // Right-to-left Arabic book page turning
+                    reverse: true,
                     itemCount: 604,
                     onPageChanged: (idx) {
                       setState(() {
@@ -1318,7 +1594,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
     );
   }
 
-  /// Renders a genuine printed Mushaf Page with continuous flowing verses & proper Basmala rules
   Widget _buildSingleMushafBookPage(
     AppState s,
     AppThemePalette p,
@@ -1334,7 +1609,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
       );
     }
 
-    // Group contiguous verses on this page by Surah so we can place the Surah Header & Basmala accurately
     final List<List<AyahItem>> surahBlocks = [];
     for (final ayah in ayahsOnPage) {
       if (surahBlocks.isEmpty ||
@@ -1364,7 +1638,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
       ),
       child: Column(
         children: [
-          // Top Margin of the Mushaf Page (Surah Name on Right, Juz on Left)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1387,8 +1660,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
             ],
           ),
           Divider(color: p.border, height: 14),
-
-          // Main Scrollable Mushaf Page Content
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -1396,9 +1667,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                 children: surahBlocks.map((block) {
                   final blockFirst = block.first;
                   final startsNewSurah = blockFirst.numberInSurah == 1;
-                  // Rule: Show decorative Basmala ONLY when a Surah starts on this page,
-                  // AND it is NOT Surah 1 (Al-Fatiha, where Basmala is Ayah 1 itself)
-                  // AND NOT Surah 9 (At-Tawbah, which has no Basmala).
                   final showDecorativeBasmala = startsNewSurah &&
                       blockFirst.surahNumber != 1 &&
                       blockFirst.surahNumber != 9;
@@ -1427,7 +1695,6 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                           ),
                         ),
                       ],
-                      // Flowing inline Mushaf verses for this Surah block
                       Directionality(
                         textDirection: TextDirection.rtl,
                         child: RichText(
@@ -1465,9 +1732,7 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
               ),
             ),
           ),
-
           Divider(color: p.border, height: 12),
-          // Bottom Mushaf Page Number Footer + Next/Prev Page Buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1636,7 +1901,8 @@ class _ActiveMushafViewState extends State<ActiveMushafView> {
                     onPressed: () => setState(() => s.toggleBookmark(item.key)),
                   ),
                   IconButton(
-                    icon: Icon(Icons.share_outlined, color: p.accent, size: 20),
+                    icon: Icon(Icons.photo_library_outlined,
+                        color: p.accent, size: 20),
                     onPressed: () =>
                         showShareVerseAsImageSheet(context, s, item),
                   ),
