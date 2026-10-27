@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -158,6 +159,9 @@ class ReciterOption {
 }
 
 class AppState extends ChangeNotifier {
+  static const MethodChannel _galleryChannel =
+      MethodChannel('com.noor.quran/gallery');
+
   late SharedPreferences _prefs;
   final FlutterLocalNotificationsPlugin notificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -190,19 +194,32 @@ class AppState extends ChangeNotifier {
   Set<String> favorites = {};
   Set<String> memorizedAyahs = {};
   Map<String, String> ayahNotes = {};
+  Map<String, int> duaCounters = {};
 
   Set<String> downloadedSurahs = {};
   Map<String, double> downloadProgress = {};
   String _offlineAudioDirPath = '';
 
-  int lastSurah = 2;
-  int lastAyah = 255;
-  int lastPage = 42;
+  int lastSurah = 1;
+  int lastAyah = 1;
+  int lastPage = 1;
 
-  int khatmaDailyGoalPages = 4;
-  int khatmaCompletedPages = 48;
+  int khatmaDailyGoalPages = 20;
+  int khatmaCompletedPages = 20;
   String selectedReadingPlan = '30 Days Khatmah Plan';
   int tasbihCount = 0;
+
+  // Daily Streak State
+  int streakDays = 1;
+  int bestStreak = 1;
+  int todayPagesRead = 1;
+  String lastStreakDate = '';
+  Set<String> activeDatesHistory = {};
+
+  bool get isRtlLanguage =>
+      selectedLanguageCode == 'ar' ||
+      selectedLanguageCode == 'ur' ||
+      selectedLanguageCode == 'fa';
 
   final List<AppThemePalette> themes = const [
     AppThemePalette(
@@ -465,12 +482,23 @@ class AppState extends ChangeNotifier {
       ayahNotes = decoded.map((k, v) => MapEntry(k, v.toString()));
     }
 
-    lastSurah = _prefs.getInt('lastSurah') ?? 2;
-    lastAyah = _prefs.getInt('lastAyah') ?? 255;
-    lastPage = _prefs.getInt('lastPage') ?? 42;
-    khatmaDailyGoalPages = _prefs.getInt('khatmaDailyGoalPages') ?? 4;
-    khatmaCompletedPages = _prefs.getInt('khatmaCompletedPages') ?? 48;
+    lastSurah = _prefs.getInt('lastSurah') ?? 1;
+    lastAyah = _prefs.getInt('lastAyah') ?? 1;
+    lastPage = _prefs.getInt('lastPage') ?? 1;
+    khatmaDailyGoalPages = _prefs.getInt('khatmaDailyGoalPages') ?? 20;
+    khatmaCompletedPages = _prefs.getInt('khatmaCompletedPages') ?? 20;
+    selectedReadingPlan =
+        _prefs.getString('selectedReadingPlan') ?? '30 Days Khatmah Plan';
     tasbihCount = _prefs.getInt('tasbihCount') ?? 0;
+
+    // Load & Verify Daily Streak
+    streakDays = _prefs.getInt('streakDays') ?? 1;
+    bestStreak = _prefs.getInt('bestStreak') ?? 1;
+    todayPagesRead = _prefs.getInt('todayPagesRead') ?? 1;
+    lastStreakDate = _prefs.getString('lastStreakDate') ?? '';
+    activeDatesHistory =
+        (_prefs.getStringList('activeDatesHistory') ?? []).toSet();
+    _checkAndRecordDailyStreak(incrementPages: false);
 
     final savedReciterId = _prefs.getString('selectedReciter') ?? 'alafasy';
     selectedReciter = reciters.firstWhere(
@@ -489,6 +517,77 @@ class AppState extends ChangeNotifier {
 
     isInitialized = true;
     notifyListeners();
+  }
+
+  String _dateKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  void _checkAndRecordDailyStreak({bool incrementPages = false}) {
+    final now = DateTime.now();
+    final todayKey = _dateKey(now);
+    final yesterdayKey = _dateKey(now.subtract(const Duration(days: 1)));
+
+    activeDatesHistory.add(todayKey);
+
+    if (lastStreakDate.isEmpty) {
+      streakDays = 1;
+      bestStreak = 1;
+      todayPagesRead = 1;
+      lastStreakDate = todayKey;
+    } else if (lastStreakDate == todayKey) {
+      if (incrementPages) {
+        todayPagesRead++;
+      }
+    } else if (lastStreakDate == yesterdayKey) {
+      streakDays++;
+      if (streakDays > bestStreak) bestStreak = streakDays;
+      todayPagesRead = 1;
+      lastStreakDate = todayKey;
+    } else {
+      // Missed more than 1 day -> reset streak to 1
+      streakDays = 1;
+      todayPagesRead = 1;
+      lastStreakDate = todayKey;
+    }
+
+    _prefs.setInt('streakDays', streakDays);
+    _prefs.setInt('bestStreak', bestStreak);
+    _prefs.setInt('todayPagesRead', todayPagesRead);
+    _prefs.setString('lastStreakDate', lastStreakDate);
+    _prefs.setStringList('activeDatesHistory', activeDatesHistory.toList());
+  }
+
+  bool isDateActiveInStreak(DateTime dt) {
+    return activeDatesHistory.contains(_dateKey(dt));
+  }
+
+  /// Saves PNG bytes directly to the Android Gallery (Pictures/NoorQuran album)
+  Future<String> savePngToGallery(Uint8List pngBytes, String fileName) async {
+    try {
+      final res = await _galleryChannel.invokeMethod<String>(
+        'saveImageToGallery',
+        {'bytes': pngBytes, 'fileName': fileName},
+      );
+      if (res != null && res.isNotEmpty) return res;
+    } catch (_) {}
+
+    // Fallback to public Pictures/Download directory
+    final fallbackDirs = [
+      '/storage/emulated/0/Pictures',
+      '/storage/emulated/0/Download',
+      Directory.systemTemp.path,
+    ];
+    for (final dirPath in fallbackDirs) {
+      try {
+        final dir = Directory(dirPath);
+        if (await dir.exists()) {
+          final file = File('${dir.path}/$fileName');
+          await file.writeAsBytes(pngBytes, flush: true);
+          return file.path;
+        }
+      } catch (_) {}
+    }
+    return fileName;
   }
 
   void _buildDefaultCatalogEditions() {
@@ -517,7 +616,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> fetchAll184CatalogEditionsOnline() async {
     try {
-      final res = await http.get(Uri.parse('https://api.alquran.cloud/v1/edition'));
+      final res =
+          await http.get(Uri.parse('https://api.alquran.cloud/v1/edition'));
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body)['data'];
         catalogEditions = list
@@ -544,8 +644,8 @@ class AppState extends ChangeNotifier {
         .trim();
   }
 
-  /// Strips the attached Basmala from Verse 1 in Surahs 2..114 (keeps it only in Surah 1 Al-Fatiha)
-  String _stripDuplicateBasmala(int surahNum, int ayahNumInSurah, String rawText) {
+  String _stripDuplicateBasmala(
+      int surahNum, int ayahNumInSurah, String rawText) {
     final text = rawText.trim();
     if (surahNum == 1 || ayahNumInSurah != 1) {
       return text;
@@ -856,6 +956,16 @@ class AppState extends ChangeNotifier {
     _prefs.setBool('isArabicUi', isArabicUi);
     notifyListeners();
 
+    if (lang.code == 'fr') {
+      for (final item in allAyahs) {
+        if (item.translationFr.isNotEmpty) {
+          item.translationEn = item.translationFr;
+        }
+      }
+      notifyListeners();
+      return;
+    }
+
     try {
       final url =
           Uri.parse('https://api.alquran.cloud/v1/quran/${lang.defaultEdition}');
@@ -913,7 +1023,14 @@ class AppState extends ChangeNotifier {
   }
 
   void toggleLanguage() {
-    isArabicUi = !isArabicUi;
+    if (selectedLanguageCode == 'ar') {
+      selectedLanguageCode = 'en';
+      isArabicUi = false;
+    } else {
+      selectedLanguageCode = 'ar';
+      isArabicUi = true;
+    }
+    _prefs.setString('selectedLanguageCode', selectedLanguageCode);
     _prefs.setBool('isArabicUi', isArabicUi);
     notifyListeners();
   }
@@ -958,12 +1075,14 @@ class AppState extends ChangeNotifier {
     required int ayah,
     required int page,
   }) {
+    final pageChanged = page != lastPage;
     lastSurah = surah;
     lastAyah = ayah;
     lastPage = page;
     _prefs.setInt('lastSurah', surah);
     _prefs.setInt('lastAyah', ayah);
     _prefs.setInt('lastPage', page);
+    _checkAndRecordDailyStreak(incrementPages: pageChanged);
     notifyListeners();
   }
 
@@ -1007,6 +1126,7 @@ class AppState extends ChangeNotifier {
       memorizedAyahs.add(key);
     }
     _prefs.setStringList('memorizedAyahs', memorizedAyahs.toList());
+    _checkAndRecordDailyStreak(incrementPages: true);
     notifyListeners();
   }
 
@@ -1020,11 +1140,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateKhatmaProgress(int pagesCompleted, int dailyGoal) {
+  void updateKhatmaProgress(int pagesCompleted, int dailyGoal, [String? planName]) {
     khatmaCompletedPages = pagesCompleted.clamp(0, 604);
-    khatmaDailyGoalPages = dailyGoal.clamp(1, 30);
+    khatmaDailyGoalPages = dailyGoal.clamp(1, 60);
+    if (planName != null) {
+      selectedReadingPlan = planName;
+      _prefs.setString('selectedReadingPlan', planName);
+    }
     _prefs.setInt('khatmaCompletedPages', khatmaCompletedPages);
     _prefs.setInt('khatmaDailyGoalPages', khatmaDailyGoalPages);
+    _checkAndRecordDailyStreak(incrementPages: true);
     notifyListeners();
   }
 
@@ -1040,5 +1165,162 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  String tr(String en, String ar) => isArabicUi ? ar : en;
+  // Multi-Language Interface Dictionary for 36+ Global Languages
+  static const Map<String, Map<String, String>> _multiLangUi = {
+    'fr': {
+      'Quran': 'Coran',
+      'Read · Listen · Reflect': 'Lire · Écouter · Méditer',
+      'Hifz & Khatmah': 'Hifz & Khatma',
+      'Ad\'iyah': 'Invocations',
+      'Duas & Azkar': 'Douas & Azkar',
+      'Bookmarks': 'Favoris',
+      'Settings': 'Paramètres',
+      'All': 'Tout',
+      'Meccan': 'Mecquoise',
+      'Medinan': 'Médinoise',
+      '30 Juz': '30 Juz',
+      '604 Pages': '604 Pages',
+      'Verses': 'Versets',
+      'Page': 'Page',
+      'Juz': 'Juz',
+      'Resume': 'Reprendre',
+      'Day Streak': 'Jours de suite',
+      'Theme Colors': 'Thèmes de couleur',
+      'Reciter': 'Récitateur',
+      'Playback Speed': 'Vitesse de lecture',
+      'Mushaf Font Size': 'Taille de police',
+      'Prayer & Qibla': 'Prière & Qibla',
+      'Next Page': 'Page suiv.',
+      'Prev Page': 'Page préc.',
+      'Save to Gallery': 'Enregistrer dans la Galerie',
+      'Copy Text + Tafsir': 'Copier Texte + Tafsir',
+    },
+    'es': {
+      'Quran': 'Corán',
+      'Read · Listen · Reflect': 'Leer · Escuchar · Reflexionar',
+      'Hifz & Khatmah': 'Hifz y Jatmah',
+      'Ad\'iyah': 'Súplicas (Duas)',
+      'Duas & Azkar': 'Duas y Azkar',
+      'Bookmarks': 'Marcadores',
+      'Settings': 'Ajustes',
+      'All': 'Todo',
+      'Meccan': 'Mequí',
+      'Medinan': 'Medinés',
+      'Verses': 'Aleyas',
+      'Page': 'Página',
+      'Resume': 'Continuar',
+      'Day Streak': 'Racha diaria',
+      'Theme Colors': 'Colores del tema',
+      'Reciter': 'Recitador',
+      'Playback Speed': 'Velocidad de audio',
+      'Mushaf Font Size': 'Tamaño de fuente',
+      'Prayer & Qibla': 'Oración y Qibla',
+      'Save to Gallery': 'Guardar en Galería',
+    },
+    'tr': {
+      'Quran': 'Kur\'an-ı Kerim',
+      'Read · Listen · Reflect': 'Oku · Dinle · Tefekkür Et',
+      'Hifz & Khatmah': 'Hıfz ve Hatim',
+      'Ad\'iyah': 'Dualar ve Zikirler',
+      'Duas & Azkar': 'Dualar ve Zikirler',
+      'Bookmarks': 'Kaydedilenler',
+      'Settings': 'Ayarlar',
+      'All': 'Tümü',
+      'Meccan': 'Mekkî',
+      'Medinan': 'Medenî',
+      'Verses': 'Ayet',
+      'Page': 'Sayfa',
+      'Resume': 'Devam Et',
+      'Day Streak': 'Günlük Seri',
+      'Theme Colors': 'Tema Renkleri',
+      'Reciter': 'Kâri (Okuyucu)',
+      'Playback Speed': 'Okuma Hızı',
+      'Mushaf Font Size': 'Yazı Boyutu',
+      'Prayer & Qibla': 'Namaz ve Kıble',
+      'Save to Gallery': 'Galeriye Kaydet',
+    },
+    'id': {
+      'Quran': 'Al-Qur\'an',
+      'Read · Listen · Reflect': 'Baca · Dengar · Renungkan',
+      'Hifz & Khatmah': 'Hafalan & Khatam',
+      'Ad\'iyah': 'Doa & Dzikir',
+      'Duas & Azkar': 'Doa & Dzikir',
+      'Bookmarks': 'Penanda',
+      'Settings': 'Pengaturan',
+      'All': 'Semua',
+      'Verses': 'Ayat',
+      'Page': 'Halaman',
+      'Resume': 'Lanjutkan',
+      'Day Streak': 'Hari Beruntun',
+      'Theme Colors': 'Warna Tema',
+      'Reciter': 'Qari',
+      'Playback Speed': 'Kecepatan Audio',
+      'Mushaf Font Size': 'Ukuran Huruf',
+      'Prayer & Qibla': 'Sholat & Kiblat',
+      'Save to Gallery': 'Simpan ke Galeri',
+    },
+    'ur': {
+      'Quran': 'قرآن مجید',
+      'Read · Listen · Reflect': 'پڑھیں · سنیں · تدبر کریں',
+      'Hifz & Khatmah': 'حفظ اور ختم قرآن',
+      'Ad\'iyah': 'مسنون دعائیں',
+      'Duas & Azkar': 'دعائیں اور اذکار',
+      'Bookmarks': 'محفوظ آیات',
+      'Settings': 'ترتیبات',
+      'All': 'تمام',
+      'Verses': 'آیات',
+      'Page': 'صفحہ',
+      'Resume': 'جاری رکھیں',
+      'Day Streak': 'مسلسل ایام',
+      'Theme Colors': 'تھیم کے رنگ',
+      'Reciter': 'قاری',
+      'Prayer & Qibla': 'نماز اور قبلہ',
+      'Save to Gallery': 'گیلری میں محفوظ کریں',
+    },
+    'de': {
+      'Quran': 'Koran',
+      'Read · Listen · Reflect': 'Lesen · Hören · Nachdenken',
+      'Hifz & Khatmah': 'Hifz & Chatma',
+      'Ad\'iyah': 'Bittgebete (Duas)',
+      'Bookmarks': 'Lesezeichen',
+      'Settings': 'Einstellungen',
+      'All': 'Alle',
+      'Verses': 'Verse',
+      'Page': 'Seite',
+      'Resume': 'Fortsetzen',
+      'Day Streak': 'Tages-Serie',
+      'Theme Colors': 'Themenfarben',
+      'Reciter': 'Rezitator',
+      'Save to Gallery': 'In Galerie speichern',
+    },
+    'ru': {
+      'Quran': 'Коран',
+      'Read · Listen · Reflect': 'Читай · Слушай · Размышляй',
+      'Hifz & Khatmah': 'Хифз и Хатм',
+      'Ad\'iyah': 'Дуа и Азкары',
+      'Bookmarks': 'Закладки',
+      'Settings': 'Настройки',
+      'All': 'Все',
+      'Verses': 'Аяты',
+      'Page': 'Стр.',
+      'Resume': 'Продолжить',
+      'Day Streak': 'Дней подряд',
+      'Theme Colors': 'Цвета темы',
+      'Reciter': 'Чтец',
+      'Save to Gallery': 'Сохранить в Галерею',
+    },
+  };
+
+  String tr(String en, String ar) {
+    if (selectedLanguageCode == 'ar' || isArabicUi) return ar;
+    if (selectedLanguageCode == 'en') return en;
+    final langMap = _multiLangUi[selectedLanguageCode];
+    if (langMap != null) {
+      if (langMap.containsKey(en)) return langMap[en]!;
+      for (final entry in langMap.entries) {
+        if (en.toLowerCase() == entry.key.toLowerCase()) return entry.value;
+      }
+    }
+    return isRtlLanguage ? ar : en;
+  }
 }
